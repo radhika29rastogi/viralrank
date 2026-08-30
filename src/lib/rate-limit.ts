@@ -1,0 +1,26 @@
+type Bucket = { count: number; resetAt: number };
+
+const buckets = new Map<string, Bucket>();
+
+export function rateLimit(key: string, limit = 10, windowMs = 60_000) {
+  const now = Date.now();
+  const current = buckets.get(key);
+
+  if (!current || current.resetAt < now) {
+    buckets.set(key, { count: 1, resetAt: now + windowMs });
+    return { ok: true, remaining: limit - 1 };
+  }
+
+  if (current.count >= limit) {
+    return { ok: false, remaining: 0, retryAfterMs: current.resetAt - now };
+  }
+
+  current.count += 1;
+  return { ok: true, remaining: limit - current.count };
+}
+
+export function clientKey(request: Request, salt: string) {
+  const forwarded = request.headers.get("x-forwarded-for");
+  const ip = forwarded?.split(",")[0]?.trim() || "unknown";
+  return `${salt}:${ip}`;
+}
