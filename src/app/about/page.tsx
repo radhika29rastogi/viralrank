@@ -22,9 +22,8 @@ export default function AboutPage() {
       </ColorBlock>
       <Disclaimer />
       <p className="text-neutral-500">
-        Instagram stats are optional. When Meta Graph API Business Discovery returns them, they are
-        labeled as Instagram data. Anything typed by a submitter is labeled as creator-provided. We
-        do not invent follower counts. Personal Instagram accounts cannot be looked up automatically.
+        Instagram stats are optional and entered by the person who submits the creator. We do not
+        invent follower counts or fetch Instagram profiles automatically.
       </p>
     </div>
   );

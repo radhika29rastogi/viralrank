@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 export default async function CreatorsPage() {
   const [{ items }, categories] = await Promise.all([
     getCreators({ sort: "bid", limit: 24 }),
-    getCategories(),
+    getCategories().then((r) => r.items),
   ]);
 
   return (

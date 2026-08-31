@@ -1,6 +1,14 @@
 export type InstagramDataSource = "instagram" | "creator_provided" | "unavailable";
 
-export type CreatorStatus = "pending" | "approved" | "rejected" | "featured";
+export type CreatorStatus =
+  | "pending"
+  | "pending_payment"
+  | "active"
+  | "approved"
+  | "rejected"
+  | "featured";
+
+export type ListingPaymentStatus = "pending" | "paid" | "failed" | "refunded";
 
 export type PaymentStatus = "created" | "pending" | "captured" | "failed";
 
@@ -32,6 +40,8 @@ export type Creator = {
   hype_count: number;
   total_hype_amount: number;
   status: CreatorStatus;
+  listing_payment_status: ListingPaymentStatus;
+  published_at: string | null;
   created_at: string;
   updated_at: string;
   categories?: Category | null;
@@ -83,4 +93,18 @@ export type Battle = {
   creator_two?: Creator | null;
 };
 
-export type PaymentKind = "ranking_bid" | "hype";
+export type PaymentKind = "ranking_bid" | "hype" | "listing_payment";
+
+export type CreatorListingPayment = {
+  id: string;
+  creator_id: string;
+  payer_name: string;
+  payer_email: string;
+  amount: number;
+  currency: string;
+  razorpay_order_id: string | null;
+  razorpay_payment_id: string | null;
+  payment_status: "pending" | "captured" | "failed";
+  is_verified: boolean;
+  created_at: string;
+};

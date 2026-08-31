@@ -22,7 +22,7 @@ export default async function ExplorePage({
       sort: (sp.sort as "bid" | "hype" | "clicks" | "followers" | "newest") || "bid",
       limit: 24,
     }),
-    getCategories(),
+    getCategories().then((r) => r.items),
   ]);
 
   return (

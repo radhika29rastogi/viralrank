@@ -22,6 +22,9 @@ insert into public.categories (name, slug) values
   ('Photography', 'photography'),
   ('Business', 'business'),
   ('Digital Marketing', 'digital-marketing'),
+  ('Sports', 'sports'),
+  ('Entertainment', 'entertainment'),
+  ('Health', 'health'),
   ('Other', 'other')
 on conflict (slug) do nothing;
 

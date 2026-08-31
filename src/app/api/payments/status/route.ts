@@ -6,13 +6,25 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const pendingId = searchParams.get("pendingId");
   const kind = searchParams.get("kind");
-  if (!pendingId || (kind !== "ranking_bid" && kind !== "hype")) {
+  if (!pendingId || (kind !== "ranking_bid" && kind !== "hype" && kind !== "listing_payment")) {
     return NextResponse.json({ status: "unknown" });
   }
 
   const admin = createAdminClient();
   const supabase = admin ?? (await createClient());
   if (!supabase) return NextResponse.json({ status: "unknown" });
+
+  if (kind === "listing_payment") {
+    const { data } = await supabase
+      .from("creator_listing_payments")
+      .select("is_verified, payment_status")
+      .eq("id", pendingId)
+      .maybeSingle();
+    if (!data) return NextResponse.json({ status: "unknown" });
+    if (data.is_verified) return NextResponse.json({ status: "verified" });
+    if (data.payment_status === "failed") return NextResponse.json({ status: "failed" });
+    return NextResponse.json({ status: "pending" });
+  }
 
   const table = kind === "ranking_bid" ? "creator_ranking_bids" : "creator_hypes";
   const { data } = await supabase

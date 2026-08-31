@@ -21,14 +21,10 @@ export function CreatorDirectoryCard({
   index?: number;
 }) {
   const category = creator.categories?.name ?? "Other";
-  const score = creator.id.startsWith("demo-")
-    ? Math.round(Number(creator.current_highest_bid) / 20)
-    : viralScore(creator);
+  const score = viralScore(creator);
   const hype = Number(creator.total_hype_amount) || creator.hype_count || 0;
   const rotate = index % 2 === 0 ? "-rotate-1" : "rotate-1";
-  const href = creator.id.startsWith("demo-")
-    ? "/submit"
-    : `/creator/${creator.instagram_username}`;
+  const href = `/creator/${creator.instagram_username}`;
 
   return (
     <article

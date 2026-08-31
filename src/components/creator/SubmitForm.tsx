@@ -1,45 +1,42 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BoldButton, ColorBlock } from "@/components/system";
 import { CategorySelect } from "@/components/creator/CategorySelect";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  instagramUrlFromUsername,
-  normalizeInstagramUsername,
-  parseInstagramProfileInput,
-} from "@/lib/format";
-import { resolveCategorySubmitValue } from "@/lib/categories";
+import { MIN_LISTING_PAYMENT } from "@/lib/creators/public";
+import { instagramUrlFromUsername, normalizeInstagramUsername } from "@/lib/format";
 import type { Category } from "@/types/database";
 
-type IgFetchResponse = {
-  available?: boolean;
-  code?: string;
-  reason?: string;
-  message?: string;
-  username?: string;
-  url?: string;
-  name?: string | null;
-  bio?: string | null;
-  profileImageUrl?: string | null;
-  followers?: number | null;
-  averageViews?: number | null;
-  missingFields?: string[];
-};
+type PaymentUiState = "idle" | "preparing" | "checkout" | "verifying" | "success" | "failed" | "cancelled";
 
-export function SubmitForm({ categories }: { categories: Category[] }) {
+function loadRazorpay() {
+  return new Promise<void>((resolve, reject) => {
+    if (window.Razorpay) {
+      resolve();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("checkout"));
+    document.body.appendChild(script);
+  });
+}
+
+export function SubmitForm() {
   const router = useRouter();
-  const [step, setStep] = useState<1 | 2>(1);
-  const [igInput, setIgInput] = useState("");
-  const [fetchMessage, setFetchMessage] = useState("");
-  const [fetchOk, setFetchOk] = useState(false);
   const [error, setError] = useState("");
-  const [fetching, setFetching] = useState(false);
   const [saving, setSaving] = useState(false);
-  const fetchGen = useRef(0);
+  const [paymentUi, setPaymentUi] = useState<PaymentUiState>("idle");
+
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [categoriesError, setCategoriesError] = useState("");
+
   const [form, setForm] = useState({
     name: "",
     instagramUsername: "",
@@ -58,102 +55,129 @@ export function SubmitForm({ categories }: { categories: Category[] }) {
   });
 
   const username = useMemo(
-    () => normalizeInstagramUsername(form.instagramUsername || igInput),
-    [form.instagramUsername, igInput],
+    () => normalizeInstagramUsername(form.instagramUsername),
+    [form.instagramUsername],
   );
 
-  function goManual(next: { username?: string; url?: string; message?: string; success?: boolean }) {
-    if (next.username) {
-      setForm((prev) => ({
-        ...prev,
-        instagramUsername: next.username || prev.instagramUsername,
-        instagramUrl: next.url || instagramUrlFromUsername(next.username || ""),
-      }));
+  const loadCategories = useCallback(async () => {
+    setCategoriesLoading(true);
+    setCategoriesError("");
+    try {
+      const res = await fetch("/api/categories");
+      const json = (await res.json()) as { categories?: Category[]; error?: string };
+      if (!res.ok || !json.categories?.length) {
+        setCategories([]);
+        setCategoriesError(json.error ?? "Could not load categories from the database.");
+        return;
+      }
+      setCategories(json.categories);
+    } catch {
+      setCategories([]);
+      setCategoriesError("Could not load categories. Check your connection and try again.");
+    } finally {
+      setCategoriesLoading(false);
     }
-    setFetchOk(Boolean(next.success));
-    setFetchMessage(next.message ?? "");
-    setStep(2);
+  }, []);
+
+  useEffect(() => {
+    void loadCategories();
+  }, [loadCategories]);
+
+  function onUsernameChange(value: string) {
+    const normalized = normalizeInstagramUsername(value);
+    setForm((prev) => ({
+      ...prev,
+      instagramUsername: value.replace(/^@/, ""),
+      instagramUrl: normalized ? instagramUrlFromUsername(normalized) : prev.instagramUrl,
+    }));
   }
 
-  async function fetchIg() {
+  async function startListingPayment(creatorId: string, payerName: string, payerEmail: string) {
+    setPaymentUi("preparing");
     setError("");
-    const parsed = parseInstagramProfileInput(igInput);
-    if (!parsed.ok) {
-      setError(parsed.message);
-      return;
-    }
-
-    setFetching(true);
-    const gen = ++fetchGen.current;
     try {
-      const res = await fetch("/api/instagram/fetch", {
+      const orderRes = await fetch("/api/payments/listing-order", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ input: igInput }),
+        body: JSON.stringify({ creatorId, payerName, payerEmail }),
       });
-      const json = (await res.json()) as IgFetchResponse;
-      if (gen !== fetchGen.current) return;
-      const nextUsername = json.username || parsed.username;
-
-      if (res.status === 400 || json.code === "empty" || json.code === "invalid_username") {
-        setError(json.message || "Enter a valid Instagram username (letters, numbers, periods, underscores).");
+      const orderJson = (await orderRes.json()) as {
+        error?: string;
+        orderId?: string;
+        key?: string;
+        amount?: number;
+        pendingId?: string;
+        username?: string;
+      };
+      if (!orderRes.ok || !orderJson.orderId || !orderJson.key || !orderJson.pendingId) {
+        setPaymentUi("failed");
+        setError(orderJson.error ?? "Could not start listing payment.");
         return;
       }
 
-      const exists = await fetch(`/api/creators?username=${encodeURIComponent(nextUsername)}`);
-      if (gen !== fetchGen.current) return;
-      const existing = (await exists.json()) as { creator?: { instagram_username: string } };
-      if (existing.creator) {
-        router.push(`/creator/${existing.creator.instagram_username}?intent=bid`);
-        return;
-      }
+      const { orderId, key, amount, pendingId, username: orderUsername } = orderJson;
 
-      if (json.available) {
-        setForm((prev) => ({
-          ...prev,
-          instagramUsername: nextUsername,
-          instagramUrl: json.url || instagramUrlFromUsername(nextUsername),
-          name: json.name || prev.name,
-          bio: json.bio || prev.bio,
-          profileImageUrl: json.profileImageUrl || prev.profileImageUrl,
-          followers: json.followers != null ? String(json.followers) : prev.followers,
-          averageViews: json.averageViews != null ? String(json.averageViews) : prev.averageViews,
-        }));
-        const missing = json.missingFields?.length
-          ? ` Missing: ${json.missingFields.join(", ")} — add those manually (creator-provided).`
-          : "";
-        setFetchOk(true);
-        setFetchMessage(`Instagram profile fetched successfully ✓${missing}`);
-        setStep(2);
-        return;
-      }
+      await loadRazorpay();
+      setPaymentUi("checkout");
 
-      goManual({
-        username: nextUsername,
-        url: json.url || instagramUrlFromUsername(nextUsername),
-        message: json.message || "We couldn't automatically fetch Instagram details. Please enter them manually.",
+      await new Promise<void>((resolve, reject) => {
+        const rzp = new window.Razorpay({
+          key,
+          amount: amount ?? MIN_LISTING_PAYMENT * 100,
+          currency: "INR",
+          name: "ViralRank.buzz",
+          description: `List @${orderUsername ?? username} on ViralRank`,
+          order_id: orderId,
+          prefill: { name: payerName, email: payerEmail },
+          theme: { color: "#F5C518" },
+          handler: async (response) => {
+            setPaymentUi("verifying");
+            try {
+              const verifyRes = await fetch("/api/payments/verify-listing", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  creatorId,
+                  pendingId,
+                  razorpayOrderId: response.razorpay_order_id,
+                  razorpayPaymentId: response.razorpay_payment_id,
+                  razorpaySignature: response.razorpay_signature,
+                }),
+              });
+              const verifyJson = (await verifyRes.json()) as { ok?: boolean; username?: string; error?: string };
+              if (!verifyRes.ok || !verifyJson.ok) {
+                setPaymentUi("failed");
+                setError(verifyJson.error ?? "Payment verification failed.");
+                reject(new Error("verify failed"));
+                return;
+              }
+              setPaymentUi("success");
+              router.push(`/creator/${verifyJson.username ?? orderUsername}?intent=bid`);
+              resolve();
+            } catch {
+              setPaymentUi("failed");
+              setError("Payment verification failed.");
+              reject(new Error("verify failed"));
+            }
+          },
+          modal: {
+            ondismiss: () => {
+              setPaymentUi("cancelled");
+              setError(
+                `Payment cancelled. Pay ₹${MIN_LISTING_PAYMENT} to publish this creator on ViralRank.`,
+              );
+              resolve();
+            },
+          },
+        });
+        rzp.open();
       });
     } catch {
-      goManual({
-        username: parsed.username,
-        url: instagramUrlFromUsername(parsed.username),
-        message: "We couldn't reach the server. Enter details manually.",
-      });
-    } finally {
-      setFetching(false);
+      if (paymentUi !== "cancelled") {
+        setPaymentUi("failed");
+        setError("Payment could not be completed.");
+      }
     }
-  }
-
-  function skipManual() {
-    fetchGen.current += 1;
-    setFetching(false);
-    setError("");
-    const parsed = parseInstagramProfileInput(igInput);
-    goManual({
-      username: parsed.ok ? parsed.username : undefined,
-      url: parsed.ok ? instagramUrlFromUsername(parsed.username) : undefined,
-      message: "",
-    });
   }
 
   async function submit(e: React.FormEvent) {
@@ -163,7 +187,7 @@ export function SubmitForm({ categories }: { categories: Category[] }) {
       setError("Creator name is required.");
       return;
     }
-    if (!form.instagramUsername.trim()) {
+    if (!username) {
       setError("Instagram username is required.");
       return;
     }
@@ -171,8 +195,7 @@ export function SubmitForm({ categories }: { categories: Category[] }) {
       setError("Instagram URL is required.");
       return;
     }
-    const categoryValue = resolveCategorySubmitValue(form);
-    if (!categoryValue) {
+    if (!form.categoryId.trim()) {
       setError("Please select a category.");
       return;
     }
@@ -184,6 +207,15 @@ export function SubmitForm({ categories }: { categories: Category[] }) {
       setError("Contact email is required.");
       return;
     }
+    if (categoriesLoading) {
+      setError("Categories are still loading.");
+      return;
+    }
+    if (categoriesError || categories.length === 0) {
+      setError("Categories must load from the database before you can submit.");
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await fetch("/api/creators", {
@@ -191,7 +223,7 @@ export function SubmitForm({ categories }: { categories: Category[] }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           ...form,
-          categoryId: categoryValue,
+          categoryId: form.categoryId,
           category: form.category,
           instagramUsername: username,
           instagramUrl: form.instagramUrl || instagramUrlFromUsername(username),
@@ -202,29 +234,35 @@ export function SubmitForm({ categories }: { categories: Category[] }) {
       const json = (await res.json()) as {
         error?: string;
         username?: string;
+        creatorId?: string;
+        requiresPayment?: boolean;
         code?: string;
         missing?: string[];
       };
-      if (res.status === 409 && json.username) {
+      if (res.status === 409 && json.error === "exists" && json.username) {
         router.push(`/creator/${json.username}?intent=bid`);
+        return;
+      }
+      if (res.status === 409 && json.error === "pending_payment" && json.creatorId) {
+        await startListingPayment(json.creatorId, form.name.trim(), form.contactEmail.trim());
         return;
       }
       if (res.status === 503 && json.code === "missing_config") {
         const vars = json.missing?.length ? json.missing.join(", ") : "Supabase env vars";
-        setError(
-          `Creator submissions are not configured. Add ${vars} to .env.local (or hosting env), run the Supabase migration, then restart the dev server.`,
-        );
+        setError(`Creator submissions are not configured. Add ${vars} to the server environment.`);
         return;
       }
       if (!res.ok) {
         setError(json.error ?? "Could not save this creator.");
         return;
       }
-      if (json.username) {
-        router.push(`/creator/${json.username}?intent=bid`);
+      if (json.creatorId && json.requiresPayment) {
+        await startListingPayment(json.creatorId, form.name.trim(), form.contactEmail.trim());
         return;
       }
-      router.push("/creators");
+      if (json.username) {
+        router.push(`/creator/${json.username}?intent=bid`);
+      }
     } catch {
       setError("Could not save this creator. Check your connection and try again.");
     } finally {
@@ -232,100 +270,153 @@ export function SubmitForm({ categories }: { categories: Category[] }) {
     }
   }
 
+  const submitLabel =
+    paymentUi === "preparing"
+      ? "Preparing payment..."
+      : paymentUi === "checkout"
+        ? "Payment in progress..."
+        : paymentUi === "verifying"
+          ? "Verifying payment..."
+          : saving
+            ? "Saving..."
+            : `Add creator & pay ₹${MIN_LISTING_PAYMENT}`;
+
   return (
     <ColorBlock color="cream" padding="lg" className="overflow-visible">
-      {step === 1 ? (
-        <div className="grid gap-4">
-          <div>
-            <Label htmlFor="ig">Instagram @username or URL</Label>
-            <Input
-              id="ig"
-              value={igInput}
-              onChange={(e) => setIgInput(e.target.value)}
-              placeholder="@creator or https://instagram.com/creator"
+      <form onSubmit={submit} className="grid gap-4 overflow-visible">
+        {paymentUi === "success" ? (
+          <ColorBlock color="lime" padding="md">
+            <p className="text-sm font-bold text-black">Payment successful — publishing creator...</p>
+          </ColorBlock>
+        ) : null}
+        {paymentUi === "cancelled" ? (
+          <ColorBlock color="yellow" padding="md">
+            <p className="text-sm font-bold text-black">
+              Payment cancelled. This creator is saved but hidden until you pay ₹{MIN_LISTING_PAYMENT}.
+            </p>
+          </ColorBlock>
+        ) : null}
+        <div className="grid gap-4 overflow-visible sm:grid-cols-2">
+          <Field
+            label="Creator name"
+            id="name"
+            value={form.name}
+            onChange={(v) => setForm((prev) => ({ ...prev, name: v }))}
+            required
+          />
+          <Field
+            label="Instagram username"
+            id="username"
+            value={form.instagramUsername}
+            onChange={onUsernameChange}
+            placeholder="souravjoshivlogs"
+            required
+          />
+          <Field
+            label="Instagram URL"
+            id="url"
+            value={form.instagramUrl}
+            onChange={(v) => setForm((prev) => ({ ...prev, instagramUrl: v }))}
+            placeholder="https://www.instagram.com/username/"
+            required
+          />
+          <div className="relative z-10 overflow-visible">
+            <Label htmlFor="category">Category</Label>
+            <CategorySelect
+              categories={categories}
+              loading={categoriesLoading}
+              error={categoriesError}
+              onRetry={loadCategories}
+              value={form.categoryId || form.categorySlug}
+              onChange={(id, name, slug) => {
+                setForm((prev) => ({
+                  ...prev,
+                  categoryId: id,
+                  category: name,
+                  categorySlug: slug,
+                }));
+                setError("");
+              }}
+              invalid={Boolean(error) && !form.categoryId}
             />
           </div>
-          {error ? <p className="text-sm font-bold text-rose-700">{error}</p> : null}
-          <BoldButton color="yellow" size="lg" disabled={fetching || !igInput.trim()} onClick={fetchIg}>
-            {fetching ? "Fetching Instagram..." : "Fetch Instagram"}
-          </BoldButton>
-          <button type="button" className="text-sm font-bold text-black underline" onClick={skipManual}>
-            Skip and enter details manually
-          </button>
+          <Field
+            label="Location"
+            id="location"
+            value={form.location}
+            onChange={(v) => setForm((prev) => ({ ...prev, location: v }))}
+            required
+          />
+          <Field
+            label="Contact email"
+            id="email"
+            type="email"
+            value={form.contactEmail}
+            onChange={(v) => setForm((prev) => ({ ...prev, contactEmail: v }))}
+            required
+          />
+          <Field
+            label="Contact phone (optional)"
+            id="phone"
+            value={form.contactPhone}
+            onChange={(v) => setForm((prev) => ({ ...prev, contactPhone: v }))}
+          />
+          <Field
+            label="Profile image URL (optional)"
+            id="image"
+            value={form.profileImageUrl}
+            onChange={(v) => setForm((prev) => ({ ...prev, profileImageUrl: v }))}
+          />
+          <Field
+            label="Followers (optional)"
+            id="followers"
+            type="number"
+            value={form.followers}
+            onChange={(v) => setForm((prev) => ({ ...prev, followers: v }))}
+          />
+          <Field
+            label="Average views (optional)"
+            id="views"
+            type="number"
+            value={form.averageViews}
+            onChange={(v) => setForm((prev) => ({ ...prev, averageViews: v }))}
+          />
         </div>
-      ) : (
-        <form onSubmit={submit} className="grid gap-4 overflow-visible">
-          {fetchMessage ? (
-            <ColorBlock color={fetchOk ? "lime" : "yellow"} padding="md">
-              <p className="text-sm font-bold text-black">{fetchMessage}</p>
-            </ColorBlock>
-          ) : null}
-          <div className="grid gap-4 overflow-visible sm:grid-cols-2">
-            <Field label="Creator name" id="name" value={form.name} onChange={(v) => setForm((prev) => ({ ...prev, name: v }))} required />
-            <Field
-              label="Instagram username"
-              id="username"
-              value={form.instagramUsername}
-              onChange={(v) => setForm((prev) => ({ ...prev, instagramUsername: v }))}
-              required
-            />
-            <Field
-              label="Instagram URL"
-              id="url"
-              value={form.instagramUrl}
-              onChange={(v) => setForm((prev) => ({ ...prev, instagramUrl: v }))}
-              required
-            />
-            <div className="relative z-10 overflow-visible">
-              <Label htmlFor="category">Category</Label>
-              <CategorySelect
-                categories={categories}
-                value={form.categoryId || form.categorySlug}
-                onChange={(id, name, slug) => {
-                  setForm((prev) => ({
-                    ...prev,
-                    categoryId: id,
-                    category: name,
-                    categorySlug: slug,
-                  }));
-                  setError("");
-                }}
-                invalid={Boolean(error) && !resolveCategorySubmitValue(form)}
-              />
-            </div>
-            <Field label="Location" id="location" value={form.location} onChange={(v) => setForm((prev) => ({ ...prev, location: v }))} required />
-            <Field
-              label="Contact email"
-              id="email"
-              type="email"
-              value={form.contactEmail}
-              onChange={(v) => setForm((prev) => ({ ...prev, contactEmail: v }))}
-              required
-            />
-            <Field label="Contact phone (optional)" id="phone" value={form.contactPhone} onChange={(v) => setForm((prev) => ({ ...prev, contactPhone: v }))} />
-            <Field label="Profile image URL (optional)" id="image" value={form.profileImageUrl} onChange={(v) => setForm((prev) => ({ ...prev, profileImageUrl: v }))} />
-            <Field label="Followers (optional)" id="followers" type="number" value={form.followers} onChange={(v) => setForm((prev) => ({ ...prev, followers: v }))} />
-            <Field label="Average views (optional)" id="views" type="number" value={form.averageViews} onChange={(v) => setForm((prev) => ({ ...prev, averageViews: v }))} />
-          </div>
-          <div>
-            <Label htmlFor="bio">Bio (optional)</Label>
-            <Textarea id="bio" value={form.bio} onChange={(e) => setForm((prev) => ({ ...prev, bio: e.target.value }))} />
-          </div>
-          <p className="text-xs font-bold text-muted-foreground">
-            Stats returned by Instagram stay labeled as Instagram data if you leave the numbers unchanged.
-            Anything you type is creator-provided — never Instagram-verified. Rank is a paid bid, not an
-            Instagram ranking.
-          </p>
-          <div className="hidden" aria-hidden>
-            <Label htmlFor="website">Website</Label>
-            <Input id="website" tabIndex={-1} autoComplete="off" value={form.website} onChange={(e) => setForm((prev) => ({ ...prev, website: e.target.value }))} />
-          </div>
-          {error ? <p className="text-sm font-bold text-rose-700">{error}</p> : null}
-          <BoldButton type="submit" color="pink" size="lg" disabled={saving}>
-            {saving ? "Saving..." : "Add creator"}
-          </BoldButton>
-        </form>
-      )}
+        <div>
+          <Label htmlFor="bio">Bio (optional)</Label>
+          <Textarea id="bio" value={form.bio} onChange={(e) => setForm((prev) => ({ ...prev, bio: e.target.value }))} />
+        </div>
+        <p className="text-xs font-bold text-muted-foreground">
+          Listing requires a one-time ₹{MIN_LISTING_PAYMENT} payment. Creators stay hidden until payment is verified
+          on the server. Rank bids are separate from listing.
+        </p>
+        <div className="hidden" aria-hidden>
+          <Label htmlFor="website">Website</Label>
+          <Input
+            id="website"
+            tabIndex={-1}
+            autoComplete="off"
+            value={form.website}
+            onChange={(e) => setForm((prev) => ({ ...prev, website: e.target.value }))}
+          />
+        </div>
+        {error ? <p className="text-sm font-bold text-rose-700">{error}</p> : null}
+        <BoldButton
+          type="submit"
+          color="pink"
+          size="lg"
+          disabled={
+            saving ||
+            categoriesLoading ||
+            Boolean(categoriesError) ||
+            paymentUi === "preparing" ||
+            paymentUi === "checkout" ||
+            paymentUi === "verifying"
+          }
+        >
+          {submitLabel}
+        </BoldButton>
+      </form>
     </ColorBlock>
   );
 }
@@ -337,6 +428,7 @@ function Field({
   onChange,
   required,
   type = "text",
+  placeholder,
 }: {
   label: string;
   id: string;
@@ -344,11 +436,19 @@ function Field({
   onChange: (value: string) => void;
   required?: boolean;
   type?: string;
+  placeholder?: string;
 }) {
   return (
     <div>
       <Label htmlFor={id}>{label}</Label>
-      <Input id={id} type={type} required={required} value={value} onChange={(e) => onChange(e.target.value)} />
+      <Input
+        id={id}
+        type={type}
+        required={required}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+      />
     </div>
   );
 }

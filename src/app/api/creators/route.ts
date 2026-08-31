@@ -5,8 +5,8 @@ import { getSupabaseConfigStatus } from "@/lib/supabase/config";
 import { ensureCategoriesSeeded, resolveCategoryId } from "@/lib/supabase/seed-categories";
 import { createClient } from "@/lib/supabase/server";
 import { submitCreatorSchema } from "@/lib/validation/schemas";
-import { matchFetchedProfile } from "@/lib/instagram/instagramService";
 import { instagramUrlFromUsername, normalizeInstagramUsername } from "@/lib/format";
+import { isPublicCreator } from "@/lib/creators/public";
 
 async function verifyTurnstile(token?: string) {
   const secret = process.env.TURNSTILE_SECRET_KEY;
@@ -39,13 +39,34 @@ export async function GET(request: Request) {
     return NextResponse.json({ creator: null });
   }
 
+  const normalized = normalizeInstagramUsername(username);
   const { data } = await supabase
     .from("creators")
-    .select("id, instagram_username, current_highest_bid, current_rank")
-    .eq("instagram_username", normalizeInstagramUsername(username))
+    .select("id, instagram_username, current_highest_bid, current_rank, status, listing_payment_status")
+    .eq("instagram_username", normalized)
     .maybeSingle();
 
-  return NextResponse.json({ creator: data });
+  if (!data) {
+    return NextResponse.json({ creator: null });
+  }
+
+  if (isPublicCreator(data)) {
+    return NextResponse.json({
+      creator: {
+        id: data.id,
+        instagram_username: data.instagram_username,
+        current_highest_bid: data.current_highest_bid,
+        current_rank: data.current_rank,
+      },
+    });
+  }
+
+  return NextResponse.json({
+    creator: null,
+    pending: data.status === "pending_payment" || data.listing_payment_status === "pending",
+    pendingCreatorId: data.id,
+    username: data.instagram_username,
+  });
 }
 
 export async function POST(request: Request) {
@@ -96,13 +117,23 @@ export async function POST(request: Request) {
   const username = normalizeInstagramUsername(input.instagramUsername);
   const { data: existing } = await admin
     .from("creators")
-    .select("instagram_username")
+    .select("id, instagram_username, status, listing_payment_status")
     .eq("instagram_username", username)
     .maybeSingle();
 
   if (existing) {
+    if (isPublicCreator(existing)) {
+      return NextResponse.json(
+        { error: "exists", username: existing.instagram_username },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
-      { error: "exists", username: existing.instagram_username },
+      {
+        error: "pending_payment",
+        username: existing.instagram_username,
+        creatorId: existing.id,
+      },
       { status: 409 },
     );
   }
@@ -138,16 +169,11 @@ export async function POST(request: Request) {
       contact_phone: input.contactPhone || null,
       followers: Number.isFinite(input.followers) ? input.followers : null,
       average_views: Number.isFinite(input.averageViews) ? input.averageViews : null,
-      instagram_data_source: matchFetchedProfile({
-        username,
-        followers: Number.isFinite(input.followers) ? input.followers : null,
-        averageViews: Number.isFinite(input.averageViews) ? input.averageViews : null,
-      })
-        ? "instagram"
-        : "creator_provided",
-      status: "approved",
+      instagram_data_source: "creator_provided",
+      status: "pending_payment",
+      listing_payment_status: "pending",
     })
-    .select("instagram_username")
+    .select("id, instagram_username")
     .single();
 
   if (error) {
@@ -161,6 +187,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not save this creator." }, { status: 500 });
   }
 
-  return NextResponse.json({ username: data.instagram_username });
+  return NextResponse.json({
+    creatorId: data.id,
+    username: data.instagram_username,
+    requiresPayment: true,
+    amount: 199,
+  });
 }
 

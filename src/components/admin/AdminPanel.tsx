@@ -54,6 +54,7 @@ export function AdminPanel({
             <tr>
               <th className="p-3">Creator</th>
               <th className="p-3">Status</th>
+              <th className="p-3">Listing payment</th>
               <th className="p-3">Category</th>
               <th className="p-3">Bid</th>
               <th className="p-3">Actions</th>
@@ -72,10 +73,24 @@ export function AdminPanel({
                     value={c.status}
                     onChange={(e) => patch(c.id, { status: e.target.value })}
                   >
+                    <option value="pending_payment">pending_payment</option>
                     <option value="pending">pending</option>
-                    <option value="approved">approved</option>
+                    <option value="active">active</option>
+                    <option value="approved">approved (legacy)</option>
+                    <option value="featured">featured (legacy)</option>
                     <option value="rejected">rejected</option>
-                    <option value="featured">featured</option>
+                  </select>
+                </td>
+                <td className="p-3">
+                  <select
+                    className="rounded-lg border-2 border-ink bg-cream px-2 py-1"
+                    value={c.listing_payment_status ?? "pending"}
+                    onChange={(e) => patch(c.id, { listingPaymentStatus: e.target.value })}
+                  >
+                    <option value="pending">pending</option>
+                    <option value="paid">paid</option>
+                    <option value="failed">failed</option>
+                    <option value="refunded">refunded</option>
                   </select>
                 </td>
                 <td className="p-3">

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { isPublicCreator } from "@/lib/creators/public";
 import { z } from "zod";
 
 const schema = z.object({ creatorId: z.string().uuid() });
@@ -38,20 +39,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, counted: false });
   }
 
+  const { data: creatorRow } = await admin
+    .from("creators")
+    .select("user_id, status, listing_payment_status")
+    .eq("id", creatorId)
+    .maybeSingle();
+
+  if (!creatorRow || !isPublicCreator(creatorRow)) {
+    return NextResponse.json({ ok: true, counted: false });
+  }
+
   const supabase = await createClient();
   if (supabase) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (user) {
-      const { data: creator } = await admin
-        .from("creators")
-        .select("user_id")
-        .eq("id", creatorId)
-        .maybeSingle();
-      if (creator?.user_id && creator.user_id === user.id) {
-        return NextResponse.json({ ok: true, counted: false });
-      }
+    if (user && creatorRow.user_id === user.id) {
+      return NextResponse.json({ ok: true, counted: false });
     }
   }
 

@@ -10,17 +10,16 @@ import { FlavorGrid } from "@/components/home/FlavorGrid";
 import { FaqSection } from "@/components/home/FaqSection";
 import { HomeCreatorsSection } from "@/components/home/HomeCreatorsSection";
 import { getArenaFeed, getCategories, getCreators, getLiveStats, getTopTwo } from "@/lib/queries";
-import { creatorsForCarousel } from "@/lib/demo-creators";
 
 export default async function HomePage() {
   const [top, activity, stats, categories, listed] = await Promise.all([
     getTopTwo(),
     getArenaFeed(24),
     getLiveStats(),
-    getCategories(),
+    getCategories().then((r) => r.items),
     getCreators({ sort: "bid", limit: 12 }),
   ]);
-  const carouselCreators = creatorsForCarousel(listed.items);
+  const carouselCreators = listed.items;
 
   return (
     <>

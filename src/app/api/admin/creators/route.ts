@@ -45,6 +45,7 @@ export async function PATCH(request: Request) {
   const { id, ...rest } = parsed.data;
   const patch: Record<string, unknown> = {};
   if (rest.status) patch.status = rest.status;
+  if (rest.listingPaymentStatus) patch.listing_payment_status = rest.listingPaymentStatus;
   if (rest.categoryId) patch.category_id = rest.categoryId;
   if (rest.name) patch.name = rest.name;
 

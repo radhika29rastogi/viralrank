@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
 import { clientKey, rateLimit } from "@/lib/rate-limit";
+import { MIN_LISTING_PAYMENT } from "@/lib/creators/public";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
-import { isPublicCreator } from "@/lib/creators/public";
 import { getRazorpay, publicRazorpayKey } from "@/lib/razorpay/client";
-import { validateHypeAmount, validateRankingBid } from "@/lib/ranking";
-import { paymentOrderSchema } from "@/lib/validation/schemas";
+import { z } from "zod";
+
+const listingOrderSchema = z.object({
+  creatorId: z.uuid(),
+  payerName: z.string().trim().min(1).max(80),
+  payerEmail: z.email(),
+});
 
 export async function POST(request: Request) {
-  const limited = rateLimit(clientKey(request, "pay-order"), 12);
+  const limited = rateLimit(clientKey(request, "listing-order"), 10);
   if (!limited.ok) {
     return NextResponse.json({ error: "Too many requests." }, { status: 429 });
   }
@@ -16,10 +20,7 @@ export async function POST(request: Request) {
   const razorpay = getRazorpay();
   const admin = createAdminClient();
   if (!razorpay || !admin || !publicRazorpayKey()) {
-    return NextResponse.json(
-      { error: "Payments are not configured yet." },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: "Payments are not configured yet." }, { status: 503 });
   }
 
   let json: unknown;
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
-  const parsed = paymentOrderSchema.safeParse(json);
+  const parsed = listingOrderSchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Please check the form." },
@@ -37,40 +38,29 @@ export async function POST(request: Request) {
     );
   }
 
-  const { kind, creatorId, amount, supporterName, supporterEmail } = parsed.data;
+  const { creatorId, payerName, payerEmail } = parsed.data;
 
   const { data: creator } = await admin
     .from("creators")
-    .select("id, name, current_highest_bid, instagram_username, status, listing_payment_status")
+    .select("id, name, instagram_username, status, listing_payment_status")
     .eq("id", creatorId)
     .maybeSingle();
 
-  if (!creator || !isPublicCreator(creator)) {
+  if (!creator) {
     return NextResponse.json({ error: "Creator not found." }, { status: 404 });
   }
 
-  if (kind === "ranking_bid") {
-    const check = validateRankingBid(amount, Number(creator.current_highest_bid) || 0);
-    if (!check.ok) return NextResponse.json({ error: check.message }, { status: 400 });
-  } else {
-    const check = validateHypeAmount(amount);
-    if (!check.ok) return NextResponse.json({ error: check.message }, { status: 400 });
+  if (creator.listing_payment_status === "paid" && creator.status === "active") {
+    return NextResponse.json({ error: "This creator is already published." }, { status: 409 });
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = supabase ? await supabase.auth.getUser() : { data: { user: null } };
-
-  const table = kind === "ranking_bid" ? "creator_ranking_bids" : "creator_hypes";
   const { data: pending, error: insertError } = await admin
-    .from(table)
+    .from("creator_listing_payments")
     .insert({
       creator_id: creatorId,
-      supporter_user_id: user?.id ?? null,
-      supporter_name: supporterName,
-      supporter_email: supporterEmail,
-      amount,
+      payer_name: payerName,
+      payer_email: payerEmail,
+      amount: MIN_LISTING_PAYMENT,
       currency: "INR",
       payment_status: "pending",
       is_verified: false,
@@ -79,21 +69,24 @@ export async function POST(request: Request) {
     .single();
 
   if (insertError || !pending) {
-    return NextResponse.json({ error: "Could not start this payment." }, { status: 500 });
+    return NextResponse.json({ error: "Could not start listing payment." }, { status: 500 });
   }
 
   try {
     const order = await razorpay.orders.create({
-      amount: Math.round(amount * 100),
+      amount: MIN_LISTING_PAYMENT * 100,
       currency: "INR",
       notes: {
-        kind,
+        kind: "listing_payment",
         creator_id: creatorId,
         pending_id: pending.id,
       },
     });
 
-    await admin.from(table).update({ razorpay_order_id: order.id }).eq("id", pending.id);
+    await admin
+      .from("creator_listing_payments")
+      .update({ razorpay_order_id: order.id })
+      .eq("id", pending.id);
 
     return NextResponse.json({
       orderId: order.id,
@@ -102,6 +95,7 @@ export async function POST(request: Request) {
       key: publicRazorpayKey(),
       pendingId: pending.id,
       creatorName: creator.name,
+      username: creator.instagram_username,
     });
   } catch {
     return NextResponse.json({ error: "Could not create a payment order." }, { status: 500 });

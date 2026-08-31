@@ -13,10 +13,7 @@ export const submitCreatorSchema = z.object({
     .max(30)
     .refine(isValidInstagramUsername, "Enter a valid Instagram username"),
   instagramUrl: z.url("Enter a valid Instagram URL"),
-  categoryId: z.union([
-    z.uuid(),
-    z.enum(["memes", "videos", "music", "art", "gaming", "tech", "fashion", "lifestyle"]),
-  ]),
+  categoryId: z.uuid("Please select a category."),
   category: z.string().trim().max(40).optional(),
   location: z.string().trim().min(1, "Location is required").max(80),
   contactEmail: email,
@@ -42,7 +39,8 @@ export const hypeAmountSchema = z.coerce.number().min(MIN_HYPE);
 
 export const adminCreatorUpdateSchema = z.object({
   id: z.uuid(),
-  status: z.enum(["pending", "approved", "rejected", "featured"]).optional(),
+  status: z.enum(["pending", "pending_payment", "active", "approved", "rejected", "featured"]).optional(),
+  listingPaymentStatus: z.enum(["pending", "paid", "failed", "refunded"]).optional(),
   categoryId: z.uuid().optional(),
   name: z.string().trim().min(1).max(80).optional(),
 });

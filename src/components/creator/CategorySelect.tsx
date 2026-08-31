@@ -2,36 +2,24 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CREATOR_CATEGORY_OPTIONS } from "@/lib/categories";
 import { cn } from "@/lib/utils";
 import type { Category } from "@/types/database";
 
 type Option = { id: string; name: string; slug: string };
 
-function resolveOptions(categories: Category[]): Option[] {
-  if (categories.length > 0) {
-    const bySlug = new Map(categories.map((c) => [c.slug, c]));
-    return CREATOR_CATEGORY_OPTIONS.flatMap((opt) => {
-      const found = bySlug.get(opt.slug);
-      if (!found) return [];
-      return [{ id: found.id, name: found.name, slug: found.slug }];
-    });
-  }
-
-  return CREATOR_CATEGORY_OPTIONS.map((opt) => ({
-    id: opt.slug,
-    name: opt.name,
-    slug: opt.slug,
-  }));
-}
-
 export function CategorySelect({
   categories,
+  loading,
+  error,
+  onRetry,
   value,
   onChange,
   invalid,
 }: {
   categories: Category[];
+  loading?: boolean;
+  error?: string;
+  onRetry?: () => void;
   value: string;
   onChange: (id: string, name: string, slug: string) => void;
   invalid?: boolean;
@@ -43,12 +31,10 @@ export function CategorySelect({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
   const listId = useId();
-  const options = resolveOptions(categories);
+
+  const options: Option[] = categories.map((c) => ({ id: c.id, name: c.name, slug: c.slug }));
   const selected = options.find((c) => c.id === value || c.slug === value);
-  const selectedIndex = Math.max(
-    0,
-    options.findIndex((c) => c.id === value || c.slug === value),
-  );
+  const selectedIndex = Math.max(0, options.findIndex((c) => c.id === value || c.slug === value));
 
   function placeMenu() {
     const btn = buttonRef.current;
@@ -103,6 +89,7 @@ export function CategorySelect({
   }
 
   function onTriggerKeyDown(e: React.KeyboardEvent<HTMLButtonElement>) {
+    if (loading || error || options.length === 0) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       if (!open) {
@@ -139,8 +126,16 @@ export function CategorySelect({
     }
   }
 
+  const buttonLabel = loading
+    ? "Loading categories..."
+    : error
+      ? "Could not load categories"
+      : options.length === 0
+        ? "No categories available"
+        : (selected?.name ?? "Pick a category");
+
   const menu =
-    open && typeof document !== "undefined"
+    open && !loading && !error && options.length > 0 && typeof document !== "undefined"
       ? createPortal(
           <ul
             ref={menuRef}
@@ -159,7 +154,7 @@ export function CategorySelect({
             className="z-[80] overflow-auto rounded-xl border-[3px] border-black bg-cream p-1 shadow-[4px_4px_0_#000]"
           >
             {options.map((c, i) => (
-              <li key={c.slug}>
+              <li key={c.id}>
                 <button
                   type="button"
                   role="option"
@@ -184,7 +179,7 @@ export function CategorySelect({
       : null;
 
   return (
-    <div ref={rootRef} className={cn("relative", open && "z-20")}>
+    <div ref={rootRef} className={cn("relative space-y-2", open && "z-20")}>
       <button
         ref={buttonRef}
         type="button"
@@ -193,21 +188,24 @@ export function CategorySelect({
         aria-expanded={open}
         aria-controls={listId}
         aria-invalid={invalid || undefined}
+        aria-busy={loading || undefined}
+        disabled={loading || Boolean(error) || options.length === 0}
         className={cn(
-          "flex h-11 w-full items-center justify-between rounded-xl border-[3px] border-black bg-cream px-3 text-left text-sm font-medium text-black outline-none focus-visible:border-hot-pink focus-visible:ring-3 focus-visible:ring-hot-pink/40",
+          "flex h-11 w-full items-center justify-between rounded-xl border-[3px] border-black bg-cream px-3 text-left text-sm font-medium text-black outline-none focus-visible:border-hot-pink focus-visible:ring-3 focus-visible:ring-hot-pink/40 disabled:cursor-not-allowed disabled:opacity-70",
           open && "border-hot-pink",
           invalid && "border-rose-600",
-          !selected && "text-neutral-500",
+          !selected && !loading && !error && "text-neutral-500",
         )}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
+          if (loading || error || options.length === 0) return;
           if (!open) placeMenu();
           setOpen((v) => !v);
         }}
         onKeyDown={onTriggerKeyDown}
       >
-        <span>{selected?.name ?? "Pick a category"}</span>
+        <span>{buttonLabel}</span>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
@@ -222,6 +220,16 @@ export function CategorySelect({
           />
         </svg>
       </button>
+      {error ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-xs font-bold text-rose-700">{error}</p>
+          {onRetry ? (
+            <button type="button" className="text-xs font-bold text-black underline" onClick={onRetry}>
+              Retry
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {menu}
     </div>
   );

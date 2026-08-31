@@ -12,7 +12,7 @@ export default async function AdminPage() {
   const { user, isAdmin } = await getCurrentUser();
   if (!user) redirect("/login");
   if (!isAdmin) redirect("/");
-  const categories = await getCategories();
+  const { items: categories } = await getCategories();
   const admin = createAdminClient();
   let creators: Creator[] = [];
   let bids: RankingBid[] = [];

@@ -23,6 +23,9 @@ export const CATEGORY_SEED = [
   { name: "Photography", slug: "photography" },
   { name: "Business", slug: "business" },
   { name: "Digital Marketing", slug: "digital-marketing" },
+  { name: "Sports", slug: "sports" },
+  { name: "Entertainment", slug: "entertainment" },
+  { name: "Health", slug: "health" },
   { name: "Other", slug: "other" },
 ] as const;
 

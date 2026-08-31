@@ -23,7 +23,7 @@ export default async function RankingsPage({
   const limit = 12;
   const [{ items, total }, categories] = await Promise.all([
     getCreators({ category: sp.category, sort, limit, offset: (page - 1) * limit }),
-    getCategories(),
+    getCategories().then((r) => r.items),
   ]);
   const throne = sort === "bid" && page === 1 ? items[0] : null;
   const grid = throne ? items.slice(1) : items;
