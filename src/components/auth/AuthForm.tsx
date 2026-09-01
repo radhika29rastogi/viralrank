@@ -1,14 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { BoldButton } from "@/components/system";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+function safeRedirectPath(value: string | null): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/dashboard";
+  return value;
+}
+
 export function AuthForm({ mode }: { mode: "login" | "signup" | "reset" }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = safeRedirectPath(searchParams.get("redirect"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -31,7 +38,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "reset" }) {
         const { error: err } = await supabase.auth.signInWithPassword({ email, password });
         if (err) setError("Could not sign in. Check your email and password.");
         else {
-          router.push("/dashboard");
+          router.push(redirectTo);
           router.refresh();
         }
       } else if (mode === "signup") {
@@ -41,7 +48,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "reset" }) {
           password,
           options: {
             data: { display_name: name },
-            emailRedirectTo: `${origin}/auth/callback`,
+            emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
           },
         });
         if (err) setError("Could not create this account.");

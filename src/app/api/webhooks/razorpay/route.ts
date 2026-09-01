@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isPublicCreator } from "@/lib/creators/public";
+import { getRazorpay } from "@/lib/razorpay/client";
+import { processListingPaymentWebhook } from "@/lib/razorpay/listing-payment";
 import { verifyWebhookSignature } from "@/lib/razorpay/verify";
 
 type RazorpayPaymentEntity = {
@@ -15,6 +16,7 @@ export async function POST(request: Request) {
   const signature = request.headers.get("x-razorpay-signature");
 
   if (!verifyWebhookSignature(rawBody, signature)) {
+    console.error("[webhook/razorpay] invalid signature");
     return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
   }
 
@@ -39,54 +41,54 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing payment." }, { status: 400 });
   }
 
+  const kind = payment.notes?.kind;
+  const razorpay = getRazorpay();
+
+  if (kind === "listing_payment" || !kind) {
+    const listingResult = await processListingPaymentWebhook(
+      admin,
+      razorpay,
+      payment,
+      signature ?? "",
+    );
+    if (listingResult.ok) {
+      console.info("[webhook/razorpay] listing payment applied", {
+        paymentId: payment.id,
+        duplicate: listingResult.duplicate,
+        published: listingResult.published,
+      });
+      return NextResponse.json({
+        kind: "listing_payment",
+        ...listingResult,
+      });
+    }
+    if (kind === "listing_payment") {
+      console.error("[webhook/razorpay] listing payment failed", listingResult.error);
+      return NextResponse.json({ error: listingResult.error }, { status: 400 });
+    }
+  }
+
+  const pendingId = payment.notes?.pending_id;
+  const resolvedKind = kind;
+  const creatorId = payment.notes?.creator_id;
+
+  if (!resolvedKind || !pendingId || !creatorId) {
+    return NextResponse.json({ error: "Missing payment notes." }, { status: 400 });
+  }
+
   const { data: existingBid } = await admin
     .from("creator_ranking_bids")
-    .select("id")
+    .select("id, is_verified")
     .eq("razorpay_payment_id", payment.id)
     .maybeSingle();
   const { data: existingHype } = await admin
     .from("creator_hypes")
-    .select("id")
+    .select("id, is_verified")
     .eq("razorpay_payment_id", payment.id)
     .maybeSingle();
 
-  const { data: existingListing } = await admin
-    .from("creator_listing_payments")
-    .select("id")
-    .eq("razorpay_payment_id", payment.id)
-    .maybeSingle();
-
-  if (existingBid || existingHype || existingListing) {
+  if (existingBid?.is_verified || existingHype?.is_verified) {
     return NextResponse.json({ ok: true, duplicate: true });
-  }
-
-  const kind = payment.notes?.kind;
-  const pendingId = payment.notes?.pending_id;
-  const creatorId = payment.notes?.creator_id;
-
-  if (!kind || !pendingId || !creatorId) {
-    return NextResponse.json({ error: "Missing payment notes." }, { status: 400 });
-  }
-
-  if (kind === "listing_payment") {
-    const { data: row } = await admin
-      .from("creator_listing_payments")
-      .select("id, creator_id")
-      .eq("id", pendingId)
-      .maybeSingle();
-    if (!row) return NextResponse.json({ error: "Unknown listing payment." }, { status: 404 });
-
-    const { data, error } = await admin.rpc("apply_verified_listing_payment", {
-      p_creator_id: row.creator_id,
-      p_payment_row_id: row.id,
-      p_razorpay_payment_id: payment.id,
-      p_razorpay_signature: signature ?? "",
-    });
-
-    if (error) {
-      return NextResponse.json({ error: "Could not apply listing payment." }, { status: 500 });
-    }
-    return NextResponse.json({ ok: true, result: data });
   }
 
   if (kind === "ranking_bid") {

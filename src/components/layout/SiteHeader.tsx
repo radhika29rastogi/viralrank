@@ -44,7 +44,11 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
               Sign Up
             </Link>
           )}
-          <BoldButton href="/submit" color="yellow" className="rounded-full px-5">
+          <BoldButton
+            href={signedIn ? "/submit" : "/login?redirect=/submit"}
+            color="yellow"
+            className="rounded-full px-5"
+          >
             Submit & Go Viral
           </BoldButton>
         </div>
@@ -87,7 +91,12 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
                     Dashboard
                   </Link>
                 )}
-                <BoldButton href="/submit" color="yellow" fullWidth className="rounded-full">
+                <BoldButton
+                  href={signedIn ? "/submit" : "/login?redirect=/submit"}
+                  color="yellow"
+                  fullWidth
+                  className="rounded-full"
+                >
                   Submit & Go Viral
                 </BoldButton>
               </nav>

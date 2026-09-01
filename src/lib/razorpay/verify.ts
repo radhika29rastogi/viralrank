@@ -1,7 +1,11 @@
 import crypto from "crypto";
 
+function webhookSecret() {
+  return process.env.RAZORPAY_WEBHOOK_SECRET?.trim() || process.env.RAZORPAY_KEY_SECRET?.trim();
+}
+
 export function verifyWebhookSignature(rawBody: string, signature: string | null) {
-  const secret = process.env.RAZORPAY_KEY_SECRET;
+  const secret = webhookSecret();
   if (!secret || !signature) return false;
 
   const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");

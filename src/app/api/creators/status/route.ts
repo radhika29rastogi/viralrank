@@ -7,6 +7,7 @@ import {
 } from "@/lib/supabase/diagnostics";
 import { ensureCategoriesSeeded } from "@/lib/supabase/seed-categories";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { probeListingPaymentSchema } from "@/lib/supabase/schema-readiness";
 
 export const runtime = "nodejs";
 
@@ -20,12 +21,22 @@ export async function GET() {
   let categoryCount = 0;
   let categoriesMessage: string | undefined;
   let categoriesErrorCode: string | undefined;
+  let listingPaymentSchemaReady = false;
+  let listingPaymentSchemaMessage: string | undefined;
+  let listingPaymentMissingColumns: string[] = [];
 
   const canQueryCategories =
     diagnostics.categoriesTable.ok || diagnostics.serviceRoleQuery.ok;
 
   const admin = createAdminClient();
   if (admin && canQueryCategories) {
+    const schema = await probeListingPaymentSchema(admin);
+    listingPaymentSchemaReady = schema.ready;
+    listingPaymentMissingColumns = schema.missingColumns;
+    if (!schema.ready) {
+      listingPaymentSchemaMessage = schema.error?.message;
+    }
+
     const seed = await ensureCategoriesSeeded(admin);
     if (seed.ok) {
       categoriesReady = seed.total > 0;
@@ -44,7 +55,11 @@ export async function GET() {
 
   return NextResponse.json({
     configured: status.configured,
-    canSubmitCreators: status.canSubmitCreators,
+    canSubmitCreators: status.canSubmitCreators && listingPaymentSchemaReady,
+    listingPaymentSchemaReady,
+    listingPaymentSchemaMessage,
+    listingPaymentMissingColumns,
+    listingPaymentMigration: "supabase/migrations/0003_listing_payment.sql",
     categoriesReady,
     categoryCount,
     categoriesMessage,

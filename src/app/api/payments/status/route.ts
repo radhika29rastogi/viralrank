@@ -17,11 +17,22 @@ export async function GET(request: Request) {
   if (kind === "listing_payment") {
     const { data } = await supabase
       .from("creator_listing_payments")
-      .select("is_verified, payment_status")
+      .select("is_verified, payment_status, creator_id")
       .eq("id", pendingId)
       .maybeSingle();
     if (!data) return NextResponse.json({ status: "unknown" });
-    if (data.is_verified) return NextResponse.json({ status: "verified" });
+    if (data.is_verified) {
+      const { data: creator } = await supabase
+        .from("creators")
+        .select("instagram_username, status, listing_payment_status")
+        .eq("id", data.creator_id)
+        .maybeSingle();
+      return NextResponse.json({
+        status: "verified",
+        username: creator?.instagram_username,
+        published: creator?.status === "active" && creator?.listing_payment_status === "paid",
+      });
+    }
     if (data.payment_status === "failed") return NextResponse.json({ status: "failed" });
     return NextResponse.json({ status: "pending" });
   }

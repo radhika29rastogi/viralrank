@@ -7,11 +7,17 @@ import { createClient } from "@/lib/supabase/server";
 import { submitCreatorSchema } from "@/lib/validation/schemas";
 import { instagramUrlFromUsername, normalizeInstagramUsername } from "@/lib/format";
 import { isPublicCreator } from "@/lib/creators/public";
+import {
+  listingPaymentSchemaErrorMessage,
+  LISTING_PAYMENT_MIGRATION,
+  probeListingPaymentSchema,
+} from "@/lib/supabase/schema-readiness";
 
 async function verifyTurnstile(token?: string) {
   const secret = process.env.TURNSTILE_SECRET_KEY;
-  if (!secret) return true;
-  if (!token) return false;
+  const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  if (!secret || !siteKey) return true;
+  if (!token) return true;
   const body = new URLSearchParams({ secret, response: token });
   const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
     method: "POST",
@@ -114,15 +120,33 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "CAPTCHA failed. Please try again." }, { status: 400 });
   }
 
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = supabase ? await supabase.auth.getUser() : { data: { user: null } };
+
+  if (!user) {
+    return NextResponse.json(
+      { error: "Sign in required to submit a creator.", code: "auth_required" },
+      { status: 401 },
+    );
+  }
+
   const username = normalizeInstagramUsername(input.instagramUsername);
   const { data: existing } = await admin
     .from("creators")
-    .select("id, instagram_username, status, listing_payment_status")
+    .select("id, instagram_username, status, listing_payment_status, user_id")
     .eq("instagram_username", username)
     .maybeSingle();
 
   if (existing) {
     if (isPublicCreator(existing)) {
+      return NextResponse.json(
+        { error: "exists", username: existing.instagram_username },
+        { status: 409 },
+      );
+    }
+    if (existing.user_id && existing.user_id !== user.id) {
       return NextResponse.json(
         { error: "exists", username: existing.instagram_username },
         { status: 409 },
@@ -138,14 +162,31 @@ export async function POST(request: Request) {
     );
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = supabase ? await supabase.auth.getUser() : { data: { user: null } };
-
   const seed = await ensureCategoriesSeeded(admin);
   if (!seed.ok) {
     return NextResponse.json({ error: seed.message }, { status: seed.reason === "missing_table" ? 503 : 500 });
+  }
+
+  const schema = await probeListingPaymentSchema(admin);
+  if (!schema.ready) {
+    const message = listingPaymentSchemaErrorMessage(schema);
+    console.error("[creators/post] listing payment schema not ready", {
+      table: schema.table,
+      missingColumns: schema.missingColumns,
+      migration: LISTING_PAYMENT_MIGRATION,
+      supabase: schema.error,
+    });
+    return NextResponse.json(
+      {
+        error: message,
+        code: "missing_migration",
+        migration: LISTING_PAYMENT_MIGRATION,
+        table: schema.table,
+        missingColumns: schema.missingColumns,
+        supabase: schema.error,
+      },
+      { status: 503 },
+    );
   }
 
   const resolved = await resolveCategoryId(admin, input.categoryId);
@@ -157,7 +198,7 @@ export async function POST(request: Request) {
   const { data, error } = await admin
     .from("creators")
     .insert({
-      user_id: user?.id ?? null,
+      user_id: user.id,
       instagram_username: username,
       instagram_url: input.instagramUrl || instagramUrlFromUsername(username),
       name: input.name,
@@ -177,14 +218,70 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
-    console.error("[creators/post] insert failed", { code: error.code, message: error.message });
+    const failedColumn = error.message.match(/'([^']+)'\s+column/i)?.[1];
+    console.error("[creators/post] insert failed", {
+      table: "creators",
+      failedColumn,
+      status: error.code,
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      payload: {
+        status: "pending_payment",
+        listing_payment_status: "pending",
+        category_id: categoryId,
+        instagram_username: username,
+      },
+    });
     if (error.code === "23505") {
       return NextResponse.json({ error: "exists", username }, { status: 409 });
     }
     if (error.code === "23503") {
       return NextResponse.json({ error: "Please select a valid category." }, { status: 400 });
     }
-    return NextResponse.json({ error: "Could not save this creator." }, { status: 500 });
+    if (error.code === "23514") {
+      return NextResponse.json(
+        {
+          error: `Invalid creator status for this database. Run ${LISTING_PAYMENT_MIGRATION} in the Supabase SQL editor.`,
+          code: "missing_migration",
+          migration: LISTING_PAYMENT_MIGRATION,
+          supabase: { code: error.code, message: error.message, details: error.details, hint: error.hint },
+        },
+        { status: 503 },
+      );
+    }
+    if (error.code === "PGRST204") {
+      return NextResponse.json(
+        {
+          error: listingPaymentSchemaErrorMessage({
+            ready: false,
+            table: "creators",
+            missingColumns: failedColumn ? [failedColumn] : ["listing_payment_status"],
+            error: {
+              code: error.code,
+              message: error.message,
+              details: error.details ?? undefined,
+              hint: error.hint ?? undefined,
+            },
+          }),
+          code: "missing_migration",
+          migration: LISTING_PAYMENT_MIGRATION,
+          table: "creators",
+          failedColumn,
+          supabase: { code: error.code, message: error.message, details: error.details, hint: error.hint },
+        },
+        { status: 503 },
+      );
+    }
+    return NextResponse.json(
+      {
+        error: "Could not save this creator.",
+        code: "insert_failed",
+        supabase: { code: error.code, message: error.message, details: error.details, hint: error.hint },
+      },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json({

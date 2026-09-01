@@ -13,7 +13,8 @@ Next.js (App Router) · TypeScript · Tailwind · shadcn/ui · Supabase · Razor
 3. In the Supabase SQL editor, run migrations in order:
    - `supabase/migrations/0001_init.sql`
    - `supabase/migrations/0002_flavor_categories.sql`
-   - `supabase/migrations/0003_listing_payment.sql` (**required** — gates public visibility behind ₹199 listing payment)
+   - `supabase/migrations/0003_listing_payment.sql` (**required** — listing payment columns + auto-publish RPC)
+   - If you previously applied a review-queue migration, also run `supabase/migrations/0005_restore_listing_auto_publish.sql`
    - **Categories only?** Run `supabase/seed/categories.sql` instead of relying on auto-seed.
    - On first load of `/submit` or `POST /api/creators`, the server also auto-seeds categories via the service role when the table exists but is empty.
    - **Demo listings for an empty site:** run `supabase/seed/demo-creators.sql` (20 `vrseed_*` creators, already paid/visible).
@@ -24,7 +25,7 @@ Next.js (App Router) · TypeScript · Tailwind · shadcn/ui · Supabase · Razor
 5. Restart `npm run dev` after changing env vars.
 6. Probe: `GET /api/creators/status` should return `canSubmitCreators: true` and `categoriesReady: true` with `categoryCount` ≥ 20.
 7. Set a user `profiles.is_admin = true` for `/admin`.
-8. Point the Razorpay webhook to `https://your-domain/api/webhooks/razorpay` for `payment.captured`.
+8. Point the Razorpay webhook to `https://your-domain/api/webhooks/razorpay` for events **`payment.captured`** and **`order.paid`**. Set `RAZORPAY_WEBHOOK_SECRET` from the Razorpay Dashboard webhook secret (server-only).
 9. `npm install` then `npm run dev`.
 
 ### Creator submissions (Add Creator form)
@@ -44,8 +45,10 @@ Without the service role key, the form shows **Creator submissions are not confi
 1. User submits the Rank a Creator form → `POST /api/creators` saves a hidden creator.
 2. Frontend opens Razorpay checkout via `POST /api/payments/listing-order`.
 3. After payment, frontend calls `POST /api/payments/verify-listing` with Razorpay signature (never trust client-only success).
-4. On verified payment: `status → active`, `listing_payment_status → paid`, `published_at → now()`.
-5. Creator becomes visible on `/`, `/creators`, `/explore`, `/rankings`, and `/creator/[username]`.
+4. On verified payment (automatic — no admin step): RPC `apply_verified_listing_payment` sets `listing_payment_status → paid`, `status → active`, `published_at → now()`.
+5. Backup: Razorpay webhook at `/api/webhooks/razorpay` runs the same RPC if the browser closes before verify-listing returns.
+6. Client polls `/api/payments/status?kind=listing_payment` briefly after checkout dismiss as a third fallback.
+7. Creator becomes visible on `/`, `/creators`, `/explore`, `/rankings`, and `/creator/[username]`.
 
 Public queries and RLS only expose creators where `status = 'active'` **and** `listing_payment_status = 'paid'`.
 

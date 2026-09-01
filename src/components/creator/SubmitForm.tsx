@@ -92,6 +92,27 @@ export function SubmitForm() {
     }));
   }
 
+  async function pollListingPaymentStatus(pendingId: string, usernameHint?: string) {
+    const started = Date.now();
+    while (Date.now() - started < 45000) {
+      const statusRes = await fetch(
+        `/api/payments/status?pendingId=${pendingId}&kind=listing_payment`,
+      );
+      const body = (await statusRes.json()) as {
+        status?: string;
+        username?: string;
+        published?: boolean;
+      };
+      if (body.status === "verified" && body.published) {
+        setPaymentUi("success");
+        router.push(`/creator/${body.username ?? usernameHint}?listing=success`);
+        return true;
+      }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    return false;
+  }
+
   async function startListingPayment(creatorId: string, payerName: string, payerEmail: string) {
     setPaymentUi("preparing");
     setError("");
@@ -144,28 +165,48 @@ export function SubmitForm() {
                   razorpaySignature: response.razorpay_signature,
                 }),
               });
-              const verifyJson = (await verifyRes.json()) as { ok?: boolean; username?: string; error?: string };
+              const verifyJson = (await verifyRes.json()) as {
+                ok?: boolean;
+                username?: string;
+                published?: boolean;
+                error?: string;
+              };
               if (!verifyRes.ok || !verifyJson.ok) {
+                const polled = await pollListingPaymentStatus(pendingId, verifyJson.username ?? orderUsername);
+                if (polled) {
+                  resolve();
+                  return;
+                }
                 setPaymentUi("failed");
                 setError(verifyJson.error ?? "Payment verification failed.");
                 reject(new Error("verify failed"));
                 return;
               }
               setPaymentUi("success");
-              router.push(`/creator/${verifyJson.username ?? orderUsername}?intent=bid`);
+              router.push(
+                `/creator/${verifyJson.username ?? orderUsername}?listing=success`,
+              );
               resolve();
             } catch {
+              const polled = await pollListingPaymentStatus(pendingId, orderUsername);
+              if (polled) {
+                resolve();
+                return;
+              }
               setPaymentUi("failed");
               setError("Payment verification failed.");
               reject(new Error("verify failed"));
             }
           },
           modal: {
-            ondismiss: () => {
+            ondismiss: async () => {
               setPaymentUi("cancelled");
-              setError(
-                `Payment cancelled. Pay ₹${MIN_LISTING_PAYMENT} to publish this creator on ViralRank.`,
-              );
+              const confirmed = await pollListingPaymentStatus(pendingId, orderUsername);
+              if (!confirmed) {
+                setError(
+                  `Payment cancelled or still processing. Pay ₹${MIN_LISTING_PAYMENT} to publish this creator on ViralRank.`,
+                );
+              }
               resolve();
             },
           },
@@ -238,7 +279,29 @@ export function SubmitForm() {
         requiresPayment?: boolean;
         code?: string;
         missing?: string[];
+        migration?: string;
+        table?: string;
+        failedColumn?: string;
+        missingColumns?: string[];
+        supabase?: { code?: string; message?: string; details?: string; hint?: string };
       };
+      if (!res.ok) {
+        console.error("[SubmitForm] POST /api/creators failed", {
+          status: res.status,
+          statusText: res.statusText,
+          body: json,
+          supabaseCode: json.supabase?.code,
+          supabaseMessage: json.supabase?.message,
+          supabaseDetails: json.supabase?.details,
+          supabaseHint: json.supabase?.hint,
+          table: json.table,
+          failedColumn: json.failedColumn ?? json.missingColumns,
+        });
+      }
+      if (res.status === 401 && json.code === "auth_required") {
+        router.push("/login?redirect=/submit");
+        return;
+      }
       if (res.status === 409 && json.error === "exists" && json.username) {
         router.push(`/creator/${json.username}?intent=bid`);
         return;
@@ -252,6 +315,10 @@ export function SubmitForm() {
         setError(`Creator submissions are not configured. Add ${vars} to the server environment.`);
         return;
       }
+      if (res.status === 503 && json.code === "missing_migration") {
+        setError(json.error ?? `Run ${json.migration ?? "supabase/migrations/0003_listing_payment.sql"} in Supabase.`);
+        return;
+      }
       if (!res.ok) {
         setError(json.error ?? "Could not save this creator.");
         return;
@@ -263,7 +330,8 @@ export function SubmitForm() {
       if (json.username) {
         router.push(`/creator/${json.username}?intent=bid`);
       }
-    } catch {
+    } catch (err) {
+      console.error("[SubmitForm] POST /api/creators network error", err);
       setError("Could not save this creator. Check your connection and try again.");
     } finally {
       setSaving(false);

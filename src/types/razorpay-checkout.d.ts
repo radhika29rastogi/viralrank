@@ -6,7 +6,7 @@ declare global {
   }
 }
 
-type RazorpayCheckoutOptions = {
+export type RazorpayCheckoutOptions = {
   key: string;
   amount: number;
   currency: string;
@@ -20,11 +20,12 @@ type RazorpayCheckoutOptions = {
     razorpay_payment_id: string;
     razorpay_order_id: string;
     razorpay_signature: string;
-  }) => void;
+  }) => void | Promise<void>;
   modal?: { ondismiss?: () => void };
 };
 
-type RazorpayCheckoutInstance = {
+export type RazorpayCheckoutInstance = {
   open: () => void;
   close: () => void;
+  on: (event: string, handler: (response: { error?: { description?: string } }) => void) => void;
 };
