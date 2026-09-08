@@ -1,4 +1,4 @@
-import { Flame, Trophy } from "lucide-react";
+import { FireIcon, TrophyIcon } from "@heroicons/react/24/solid";
 import { ArenaBattle } from "@/components/battle/BattleCard";
 import { Badge, BoldButton, DisplayHeadline } from "@/components/system";
 import { HowItWorks } from "@/components/layout/HowItWorks";
@@ -39,10 +39,10 @@ export default async function HomePage() {
             Creators compete for attention. You decide who gets the hype.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <BoldButton href="/submit" color="pink" size="lg" icon={<Trophy className="size-4" />}>
+            <BoldButton href="/submit" color="pink" size="lg" icon={<TrophyIcon className="size-4" />}>
               Rank a Creator
             </BoldButton>
-            <BoldButton href="/explore" color="yellow" size="lg" icon={<Flame className="size-4" />}>
+            <BoldButton href="/explore" color="yellow" size="lg" icon={<FireIcon className="size-4" />}>
               Explore Creators
             </BoldButton>
           </div>

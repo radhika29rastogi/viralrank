@@ -65,7 +65,7 @@ export function ActivityFeed({ initial }: { initial: ArenaEvent[] }) {
             id: "empty",
             kind: "join" as const,
             username: "the-arena",
-            created_at: new Date().toISOString(),
+            created_at: "1970-01-01T00:00:00.000Z",
           },
         ];
 

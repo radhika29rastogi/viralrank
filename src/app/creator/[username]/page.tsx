@@ -2,9 +2,12 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Badge, ColorBlock, DisplayHeadline } from "@/components/system";
 import { BidButton } from "@/components/creator/BidButton";
+import { CreatorAvatar } from "@/components/creator/CreatorAvatar";
 import { HypeButton } from "@/components/creator/HypeButton";
 import { CountUp } from "@/components/creator/CountUp";
 import { TrackProfileClick } from "@/components/creator/TrackProfileClick";
+import { displayRank, totalEngagement } from "@/lib/creator-engagement";
+import { formatCompactCount } from "@/lib/creator-stats";
 import { minOvertakeAmount } from "@/lib/ranking";
 import { formatNumber, siteUrl } from "@/lib/format";
 import { getCreatorByUsername } from "@/lib/queries";
@@ -18,7 +21,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: `@${username}`,
     description: creator
-      ? `${creator.name} on ViralRank.buzz — rank, hype, and paid support.`
+      ? `${creator.name} on ViralRank.buzz — rank, hype, and community support.`
       : `Creator @${username} on ViralRank.buzz`,
     openGraph: {
       title,
@@ -43,22 +46,13 @@ export default async function CreatorPage({ params }: Props) {
       <TrackProfileClick creatorId={creator.id} />
       <ColorBlock color="cream" padding="lg">
         <Badge color="yellow" float="tl" rotate={-2}>
-          {creator.current_rank ? `#${creator.current_rank}` : "New"}
+          {displayRank(creator.current_rank) ?? "New"}
         </Badge>
         <Badge color="purple" float="tr" rotate={2}>
           {creator.categories?.name ?? "Other"}
         </Badge>
         <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:items-center">
-          <div className="size-40 overflow-hidden rounded-3xl border-[4px] border-black bg-sky">
-            {creator.profile_image_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={creator.profile_image_url} alt="" className="size-full object-cover" />
-            ) : (
-              <div className="flex size-full items-center justify-center text-5xl font-extrabold">
-                {creator.name.slice(0, 1)}
-              </div>
-            )}
-          </div>
+          <CreatorAvatar name={creator.name} imageUrl={creator.profile_image_url} size="xl" />
           <div>
             <DisplayHeadline as="h1" size="md">
               {creator.name}
@@ -72,9 +66,7 @@ export default async function CreatorPage({ params }: Props) {
               <Badge color="yellow">{metricsLabel}</Badge>
             </div>
             <a
-              href={creator.instagram_url}
-              target="_blank"
-              rel="noreferrer"
+              href={`/api/creators/${creator.id}/instagram`}
               className="mt-4 inline-block text-sm font-bold text-black underline"
             >
               View Instagram →
@@ -83,33 +75,40 @@ export default async function CreatorPage({ params }: Props) {
         </div>
       </ColorBlock>
 
-      <div className="grid gap-8 md:grid-cols-2">
-        <ColorBlock color="yellow" padding="lg">
-          <p className="text-sm font-extrabold uppercase text-black">Ranking</p>
-          <p className="mt-2 text-4xl font-extrabold">#{creator.current_rank ?? "—"}</p>
-          <p className="text-2xl font-extrabold">
-            <CountUp value={bid} />
-          </p>
-          <p className="mt-2 text-sm text-neutral-700">Beat ₹{beat.toLocaleString("en-IN")} to take this rank</p>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <ColorBlock color="yellow" padding="md">
+          <p className="text-xs font-extrabold uppercase">Rank</p>
+          <p className="mt-1 text-3xl font-extrabold">{displayRank(creator.current_rank) ?? "—"}</p>
         </ColorBlock>
-        <ColorBlock color="pink" padding="lg">
-          <p className="text-sm font-extrabold uppercase text-black">Community</p>
-          <p className="mt-2 text-4xl font-extrabold">{creator.hype_count} hypes</p>
-          <p className="text-2xl font-extrabold">
-            <CountUp value={Number(creator.total_hype_amount) || 0} />
-          </p>
-          <p className="mt-2 text-sm text-neutral-700">Hype never changes rank</p>
+        <ColorBlock color="pink" padding="md">
+          <p className="text-xs font-extrabold uppercase">🔥 Hype</p>
+          <p className="mt-1 text-3xl font-extrabold">{formatCompactCount(creator.hype_count)}</p>
+        </ColorBlock>
+        <ColorBlock color="lime" padding="md">
+          <p className="text-xs font-extrabold uppercase">👀 Profile views</p>
+          <p className="mt-1 text-3xl font-extrabold">{formatCompactCount(creator.profile_clicks)}</p>
+        </ColorBlock>
+        <ColorBlock color="blue" padding="md">
+          <p className="text-xs font-extrabold uppercase">Instagram clicks</p>
+          <p className="mt-1 text-3xl font-extrabold">{formatCompactCount(creator.instagram_clicks ?? 0)}</p>
         </ColorBlock>
       </div>
 
-      <p className="text-sm text-neutral-500">Profile clicks: {creator.profile_clicks}</p>
+      <ColorBlock color="cream" padding="md">
+        <p className="text-sm font-extrabold uppercase text-black">Total engagement</p>
+        <p className="mt-1 text-2xl font-extrabold">{formatCompactCount(totalEngagement(creator))}</p>
+        <p className="mt-2 text-sm text-neutral-600">
+          Rank is calculated server-side from hype and engagement. Ranking bid:{" "}
+          <CountUp value={bid} /> · Beat ₹{beat.toLocaleString("en-IN")} to raise bid rank weight.
+        </p>
+      </ColorBlock>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <HypeButton
           creatorId={creator.id}
           creatorName={creator.name}
           currentHighestBid={bid}
-          label="Hype this creator — ₹49+"
+          initialCount={creator.hype_count}
         />
         <BidButton
           creatorId={creator.id}

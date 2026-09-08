@@ -37,6 +37,7 @@ export type Creator = {
   current_rank: number | null;
   rank_set_at: string | null;
   profile_clicks: number;
+  instagram_clicks: number;
   hype_count: number;
   total_hype_amount: number;
   status: CreatorStatus;
@@ -101,6 +102,9 @@ export type CreatorListingPayment = {
   payer_name: string;
   payer_email: string;
   amount: number;
+  original_amount: number | null;
+  discount_amount: number;
+  coupon_code: string | null;
   currency: string;
   razorpay_order_id: string | null;
   razorpay_payment_id: string | null;

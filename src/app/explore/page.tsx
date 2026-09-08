@@ -4,6 +4,8 @@ import { ListingFilters } from "@/components/creator/ListingFilters";
 import { ColorBlock, DisplayHeadline } from "@/components/system";
 import { getCategories, getCreators } from "@/lib/queries";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Explore",
   description: "Search Instagram creators on ViralRank.buzz.",
@@ -15,15 +17,16 @@ export default async function ExplorePage({
   searchParams: Promise<{ q?: string; category?: string; sort?: string }>;
 }) {
   const sp = await searchParams;
-  const [{ items }, categories] = await Promise.all([
+  const [{ items }, categoryResult] = await Promise.all([
     getCreators({
       search: sp.q,
       category: sp.category,
       sort: (sp.sort as "bid" | "hype" | "clicks" | "followers" | "newest") || "bid",
       limit: 24,
     }),
-    getCategories().then((r) => r.items),
+    getCategories(),
   ]);
+  const categories = categoryResult.items;
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 px-4 py-12">

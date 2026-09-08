@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isValidInstagramUsername } from "@/lib/instagram/username";
+import { isAllowedInstagramUrl } from "@/lib/security";
 import { MIN_HYPE, MIN_RANKING_BID } from "@/lib/ranking";
 
 const email = z.email("Enter a valid email");
@@ -12,7 +13,9 @@ export const submitCreatorSchema = z.object({
     .min(1)
     .max(30)
     .refine(isValidInstagramUsername, "Enter a valid Instagram username"),
-  instagramUrl: z.url("Enter a valid Instagram URL"),
+  instagramUrl: z
+    .url("Enter a valid Instagram URL")
+    .refine(isAllowedInstagramUrl, "Instagram URL must be an instagram.com link"),
   categoryId: z.uuid("Please select a category."),
   category: z.string().trim().max(40).optional(),
   location: z.string().trim().min(1, "Location is required").max(80),

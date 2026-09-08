@@ -5,6 +5,33 @@ import { ensureCategoriesSeeded } from "@/lib/supabase/seed-categories";
 import type { Battle, Category, Creator, CreatorListingPayment, Hype, RankingBid } from "@/types/database";
 
 const creatorSelect = `
+  id,
+  instagram_username,
+  instagram_url,
+  name,
+  bio,
+  profile_image_url,
+  category_id,
+  location,
+  followers,
+  average_views,
+  instagram_data_source,
+  current_highest_bid,
+  current_rank,
+  rank_set_at,
+  profile_clicks,
+  instagram_clicks,
+  hype_count,
+  total_hype_amount,
+  status,
+  listing_payment_status,
+  published_at,
+  created_at,
+  updated_at,
+  categories:category_id ( id, name, slug )
+`;
+
+const creatorSelectOwner = `
   *,
   categories:category_id ( id, name, slug )
 `;
@@ -14,20 +41,48 @@ function publicCreatorFilters(query: any) {
   return query.eq("status", PUBLIC_CREATOR_STATUS).eq("listing_payment_status", PUBLIC_LISTING_PAYMENT_STATUS);
 }
 
+function dedupeCategories(rows: Category[]): Category[] {
+  const seen = new Set<string>();
+  const items: Category[] = [];
+  for (const row of rows) {
+    const slug = row.slug?.trim().toLowerCase();
+    const name = row.name?.trim();
+    if (!slug || !name || !row.id) continue;
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    items.push({ ...row, slug, name });
+  }
+  return items;
+}
+
 export async function getCategories(): Promise<{ items: Category[]; error?: string }> {
+  const admin = createAdminClient();
+  if (admin) {
+    const seed = await ensureCategoriesSeeded(admin);
+    if (!seed.ok) {
+      console.error("[getCategories] seed failed", seed.message);
+      return { items: [], error: seed.message };
+    }
+    const { data, error } = await admin.from("categories").select("id, name, slug").order("name");
+    if (error) {
+      console.error("[getCategories] admin query failed", error.message);
+      return { items: [], error: error.message };
+    }
+    return { items: dedupeCategories((data as Category[]) ?? []) };
+  }
+
   const supabase = await createClient();
   if (!supabase) return { items: [], error: "Supabase is not configured." };
-  const { data, error } = await supabase.from("categories").select("*").order("name");
-  if (error) return { items: [], error: error.message };
-  return { items: (data as Category[]) ?? [] };
+  const { data, error } = await supabase.from("categories").select("id, name, slug").order("name");
+  if (error) {
+    console.error("[getCategories] anon query failed", error.message);
+    return { items: [], error: error.message };
+  }
+  return { items: dedupeCategories((data as Category[]) ?? []) };
 }
 
 /** Categories for submit — seeds when empty, returns all DB rows sorted by name. */
 export async function getSubmitCategories(): Promise<{ items: Category[]; error?: string }> {
-  const admin = createAdminClient();
-  if (admin) {
-    await ensureCategoriesSeeded(admin);
-  }
   return getCategories();
 }
 
@@ -60,7 +115,10 @@ export async function getCreators(options: {
       .select("id")
       .eq("slug", options.category)
       .maybeSingle();
-    if (cat?.id) query = query.eq("category_id", cat.id);
+    if (!cat?.id) {
+      return { items: [] as Creator[], total: 0 };
+    }
+    query = query.eq("category_id", cat.id);
   }
 
   if (options.search) {
@@ -94,8 +152,17 @@ export async function getCreators(options: {
 }
 
 export async function getTopTwo(): Promise<Creator[]> {
-  const { items } = await getCreators({ sort: "bid", limit: 2 });
-  return items;
+  const supabase = await createClient();
+  if (!supabase) return [];
+
+  const { data } = await publicCreatorFilters(
+    supabase.from("creators").select(creatorSelect),
+  )
+    .not("current_rank", "is", null)
+    .order("current_rank", { ascending: true })
+    .limit(2);
+
+  return (data as Creator[]) ?? [];
 }
 
 type BidRow = {
@@ -276,7 +343,7 @@ export async function getDashboardData(userId: string) {
   }
 
   const [{ data: creators }, { data: bids }, { data: hypes }] = await Promise.all([
-    supabase.from("creators").select(creatorSelect).eq("user_id", userId),
+    supabase.from("creators").select(creatorSelectOwner).eq("user_id", userId),
     supabase
       .from("creator_ranking_bids")
       .select("*")

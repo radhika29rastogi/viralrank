@@ -1,7 +1,11 @@
 import crypto from "crypto";
 
 function webhookSecret() {
-  return process.env.RAZORPAY_WEBHOOK_SECRET?.trim() || process.env.RAZORPAY_KEY_SECRET?.trim();
+  const dedicated = process.env.RAZORPAY_WEBHOOK_SECRET?.trim();
+  if (dedicated) return dedicated;
+  // Dev fallback only — production must set RAZORPAY_WEBHOOK_SECRET
+  if (process.env.NODE_ENV === "production") return undefined;
+  return process.env.RAZORPAY_KEY_SECRET?.trim();
 }
 
 export function verifyWebhookSignature(rawBody: string, signature: string | null) {
