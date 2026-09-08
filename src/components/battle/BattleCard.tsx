@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { Flame, Trophy, Zap } from "lucide-react";
+import { FireIcon, TrophyIcon } from "@heroicons/react/24/solid";
 import { Badge, BoldButton, ColorBlock } from "@/components/system";
-import { BidButton } from "@/components/creator/BidButton";
-import { CountUp } from "@/components/creator/CountUp";
-import { formatInr } from "@/lib/format";
+import { CreatorAvatar } from "@/components/creator/CreatorAvatar";
+import { HypeButton } from "@/components/creator/HypeButton";
+import { formatCompactCount } from "@/lib/creator-stats";
+import { displayRank } from "@/lib/creator-engagement";
 import type { Creator } from "@/types/database";
 
 const panelTone = ["from-hot-pink to-coral", "from-sky to-lavender"];
@@ -24,33 +25,39 @@ function VsBadge() {
 }
 
 function Panel({ creator, tone }: { creator: Creator; tone: string }) {
-  const bid = Number(creator.current_highest_bid) || 0;
+  const hype = Number(creator.hype_count) || 0;
+  const rankLabel = displayRank(creator.current_rank) ?? "—";
+
   return (
-    <div className={`relative flex min-h-56 flex-col overflow-hidden rounded-2xl border-[3px] border-black bg-gradient-to-br ${tone}`}>
+    <div className={`relative flex min-h-64 flex-col overflow-hidden rounded-2xl border-[3px] border-black bg-gradient-to-br ${tone}`}>
       <span className="absolute top-3 left-3 z-10 rounded-full border-[3px] border-black bg-cream px-3 py-1 text-xs font-extrabold uppercase">
+        {rankLabel}
+      </span>
+      <span className="absolute top-3 right-3 z-10 rounded-full border-[3px] border-black bg-cream px-3 py-1 text-xs font-extrabold uppercase">
         @{creator.instagram_username}
       </span>
       <Link
         href={`/creator/${creator.instagram_username}`}
-        className="flex flex-1 items-center justify-center pt-10"
+        className="flex flex-1 flex-col items-center justify-center gap-2 pt-12"
       >
-        {creator.profile_image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={creator.profile_image_url}
-            alt=""
-            className="size-24 rounded-full border-[3px] border-black object-cover"
-          />
-        ) : (
-          <span className="flex size-24 items-center justify-center rounded-full border-[3px] border-black bg-cream text-5xl">
-            {creator.name.slice(0, 1)}
-          </span>
-        )}
+        <CreatorAvatar name={creator.name} imageUrl={creator.profile_image_url} size="lg" />
+        <p className="text-center text-sm font-extrabold text-black">{creator.name}</p>
       </Link>
-      <div className="border-t-[3px] border-black bg-cream px-3 py-2 text-center">
-        <p className="text-xl font-extrabold text-black">
-          <CountUp value={bid} />
+      <div className="space-y-2 border-t-[3px] border-black bg-cream px-3 py-3">
+        <p className="flex items-center justify-center gap-2 text-lg font-extrabold text-black">
+          <FireIcon className="size-5 text-hot-pink" />
+          {formatCompactCount(hype)} HYPE
         </p>
+        <p className="text-center text-xs font-semibold text-neutral-500">
+          👀 {formatCompactCount(creator.profile_clicks)} views · IG {formatCompactCount(creator.instagram_clicks ?? 0)}
+        </p>
+        <HypeButton
+          creatorId={creator.id}
+          creatorName={creator.name}
+          currentHighestBid={Number(creator.current_highest_bid) || 0}
+          initialCount={hype}
+          compact
+        />
       </div>
     </div>
   );
@@ -58,7 +65,7 @@ function Panel({ creator, tone }: { creator: Creator; tone: string }) {
 
 function GhostPanel({ label }: { label: string }) {
   return (
-    <div className="relative flex min-h-56 flex-col overflow-hidden rounded-2xl border-[3px] border-dashed border-black/50 bg-neutral-200/70">
+    <div className="relative flex min-h-64 flex-col overflow-hidden rounded-2xl border-[3px] border-dashed border-black/50 bg-neutral-200/70">
       <span className="absolute top-3 left-3 z-10 rounded-full border-[3px] border-dashed border-black/40 bg-cream px-3 py-1 text-xs font-extrabold uppercase text-neutral-400">
         {label}
       </span>
@@ -68,7 +75,7 @@ function GhostPanel({ label }: { label: string }) {
         </span>
       </div>
       <div className="border-t-[3px] border-dashed border-black/40 bg-cream/80 px-3 py-2 text-center">
-        <p className="text-xl font-extrabold text-neutral-400">???</p>
+        <p className="text-sm font-extrabold text-neutral-400">Waiting for challenger</p>
       </div>
     </div>
   );
@@ -83,7 +90,7 @@ export function BattleCard({
   two: Creator;
   showNewOne?: boolean;
 }) {
-  const total = (Number(one.current_highest_bid) || 0) + (Number(two.current_highest_bid) || 0);
+  const totalHype = (Number(one.hype_count) || 0) + (Number(two.hype_count) || 0);
 
   return (
     <ColorBlock color="cream" padding="lg" className="overflow-visible">
@@ -100,32 +107,25 @@ export function BattleCard({
         <VsBadge />
       </div>
 
-      <div className="mt-6 flex justify-center gap-8 text-sm font-semibold text-neutral-500">
+      <div className="mt-6 flex justify-center gap-8 text-sm font-semibold text-neutral-600">
         <span className="inline-flex items-center gap-2">
-          <Trophy className="size-4" />
-          {formatInr(Number(one.current_highest_bid) || 0)}
+          <TrophyIcon className="size-4" />
+          {displayRank(one.current_rank)} · {formatCompactCount(one.hype_count)} hype
         </span>
         <span className="inline-flex items-center gap-2">
-          <Flame className="size-4" />
-          {formatInr(Number(two.current_highest_bid) || 0)}
+          <FireIcon className="size-4 text-hot-pink" />
+          {formatCompactCount(totalHype)} total hype
         </span>
-      </div>
-
-      <div className="mt-6">
-        <BidButton
-          creatorId={one.current_highest_bid >= two.current_highest_bid ? two.id : one.id}
-          creatorName={one.current_highest_bid >= two.current_highest_bid ? two.name : one.name}
-          currentHighestBid={Math.max(Number(one.current_highest_bid) || 0, Number(two.current_highest_bid) || 0)}
-          rank={one.current_highest_bid >= two.current_highest_bid ? two.current_rank : one.current_rank}
-          label={`Live total ${formatInr(total)} — beat the rank`}
-        />
+        <span className="inline-flex items-center gap-2">
+          <TrophyIcon className="size-4" />
+          {displayRank(two.current_rank)} · {formatCompactCount(two.hype_count)} hype
+        </span>
       </div>
     </ColorBlock>
   );
 }
 
 export function DefendingChampion({ creator }: { creator: Creator }) {
-  const bid = Number(creator.current_highest_bid) || 0;
   return (
     <ColorBlock color="cream" padding="lg" className="overflow-visible">
       <Badge color="pink" rotate={-2} float="tl" icon="👑">
@@ -143,13 +143,9 @@ export function DefendingChampion({ creator }: { creator: Creator }) {
         Waiting for challenger
       </p>
       <div className="mt-6">
-        <BidButton
-          creatorId={creator.id}
-          creatorName={creator.name}
-          currentHighestBid={bid}
-          rank={creator.current_rank ?? 1}
-          label="Take the throne"
-        />
+        <BoldButton href="/submit" color="yellow" size="lg" fullWidth>
+          Challenge for #2
+        </BoldButton>
       </div>
     </ColorBlock>
   );
@@ -173,7 +169,7 @@ export function EmptyBattle() {
         Waiting for challenger
       </p>
       <div className="mt-6">
-        <BoldButton href="/submit" color="yellow" size="lg" fullWidth icon={<Zap className="size-4" />}>
+        <BoldButton href="/submit" color="yellow" size="lg" fullWidth>
           Be the First #1
         </BoldButton>
       </div>

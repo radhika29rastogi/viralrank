@@ -12,12 +12,16 @@ import {
   LISTING_PAYMENT_MIGRATION,
   probeListingPaymentSchema,
 } from "@/lib/supabase/schema-readiness";
+import { isOwnStorageImageUrl, publicErrorBody } from "@/lib/security";
+import { normalizeSupabaseUrl } from "@/lib/supabase/config";
 
 async function verifyTurnstile(token?: string) {
   const secret = process.env.TURNSTILE_SECRET_KEY;
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  // If Turnstile is not configured, allow submissions.
   if (!secret || !siteKey) return true;
-  if (!token) return true;
+  // If configured, a token is required — never bypass.
+  if (!token) return false;
   const body = new URLSearchParams({ secret, response: token });
   const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
     method: "POST",
@@ -67,11 +71,10 @@ export async function GET(request: Request) {
     });
   }
 
+  // Do not leak pending creator IDs publicly
   return NextResponse.json({
     creator: null,
-    pending: data.status === "pending_payment" || data.listing_payment_status === "pending",
-    pendingCreatorId: data.id,
-    username: data.instagram_username,
+    pending: true,
   });
 }
 
@@ -164,7 +167,10 @@ export async function POST(request: Request) {
 
   const seed = await ensureCategoriesSeeded(admin);
   if (!seed.ok) {
-    return NextResponse.json({ error: seed.message }, { status: seed.reason === "missing_table" ? 503 : 500 });
+    return NextResponse.json(
+      { error: "Creator submissions are not ready. Contact support if this continues." },
+      { status: seed.reason === "missing_table" ? 503 : 500 },
+    );
   }
 
   const schema = await probeListingPaymentSchema(admin);
@@ -177,14 +183,13 @@ export async function POST(request: Request) {
       supabase: schema.error,
     });
     return NextResponse.json(
-      {
-        error: message,
+      publicErrorBody(message, {
         code: "missing_migration",
         migration: LISTING_PAYMENT_MIGRATION,
         table: schema.table,
         missingColumns: schema.missingColumns,
         supabase: schema.error,
-      },
+      }),
       { status: 503 },
     );
   }
@@ -195,6 +200,19 @@ export async function POST(request: Request) {
   }
   const categoryId = resolved.id;
 
+  let profileImageUrl = input.profileImageUrl || null;
+  if (profileImageUrl) {
+    const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
+      ? normalizeSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL)
+      : undefined;
+    if (!isOwnStorageImageUrl(profileImageUrl, supabaseHost)) {
+      return NextResponse.json(
+        { error: "Profile image must be uploaded through ViralRank." },
+        { status: 400 },
+      );
+    }
+  }
+
   const { data, error } = await admin
     .from("creators")
     .insert({
@@ -203,7 +221,7 @@ export async function POST(request: Request) {
       instagram_url: input.instagramUrl || instagramUrlFromUsername(username),
       name: input.name,
       bio: input.bio || null,
-      profile_image_url: input.profileImageUrl || null,
+      profile_image_url: profileImageUrl,
       category_id: categoryId,
       location: input.location,
       contact_email: input.contactEmail,
@@ -242,44 +260,31 @@ export async function POST(request: Request) {
     }
     if (error.code === "23514") {
       return NextResponse.json(
-        {
-          error: `Invalid creator status for this database. Run ${LISTING_PAYMENT_MIGRATION} in the Supabase SQL editor.`,
+        publicErrorBody("Creator submissions are not ready. Contact support if this continues.", {
           code: "missing_migration",
           migration: LISTING_PAYMENT_MIGRATION,
           supabase: { code: error.code, message: error.message, details: error.details, hint: error.hint },
-        },
+        }),
         { status: 503 },
       );
     }
     if (error.code === "PGRST204") {
       return NextResponse.json(
-        {
-          error: listingPaymentSchemaErrorMessage({
-            ready: false,
-            table: "creators",
-            missingColumns: failedColumn ? [failedColumn] : ["listing_payment_status"],
-            error: {
-              code: error.code,
-              message: error.message,
-              details: error.details ?? undefined,
-              hint: error.hint ?? undefined,
-            },
-          }),
+        publicErrorBody("Creator submissions are not ready. Contact support if this continues.", {
           code: "missing_migration",
           migration: LISTING_PAYMENT_MIGRATION,
           table: "creators",
           failedColumn,
           supabase: { code: error.code, message: error.message, details: error.details, hint: error.hint },
-        },
+        }),
         { status: 503 },
       );
     }
     return NextResponse.json(
-      {
-        error: "Could not save this creator.",
+      publicErrorBody("Could not save this creator.", {
         code: "insert_failed",
         supabase: { code: error.code, message: error.message, details: error.details, hint: error.hint },
-      },
+      }),
       { status: 500 },
     );
   }

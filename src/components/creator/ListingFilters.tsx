@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BoldButton, ColorBlock } from "@/components/system";
 import type { Category } from "@/types/database";
 
@@ -13,14 +13,52 @@ const sorts = [
   { value: "newest", label: "Newest" },
 ];
 
-export function ListingFilters({ categories }: { categories: Category[] }) {
+export function ListingFilters({
+  categories: initialCategories = [],
+}: {
+  categories?: Category[];
+}) {
   const router = useRouter();
   const params = useSearchParams();
   const [q, setQ] = useState(params.get("q") ?? "");
+  const [categories, setCategories] = useState<Category[]>(initialCategories);
+  const [loading, setLoading] = useState(initialCategories.length === 0);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (initialCategories.length === 0) setLoading(true);
+      try {
+        const res = await fetch("/api/categories");
+        const json = (await res.json()) as { categories?: Category[]; error?: string };
+        if (cancelled) return;
+        if (!res.ok) {
+          setError(json.error ?? "Could not load categories from the database.");
+          if (!initialCategories.length) setCategories([]);
+          return;
+        }
+        const items = (json.categories ?? []).filter((c) => c?.id && c.slug && c.name);
+        setCategories(items);
+        setError(items.length ? "" : "");
+      } catch {
+        if (!cancelled) {
+          setError("Could not load categories. Check your connection and try again.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialCategories.length]);
 
   function update(next: Record<string, string>) {
     const sp = new URLSearchParams(params.toString());
-    Object.entries(next).forEach(([k, v]) => {
+    const merged = { q, category: params.get("category") ?? "", sort: params.get("sort") ?? "", ...next };
+    Object.entries(merged).forEach(([k, v]) => {
       if (!v || v === "all") sp.delete(k);
       else sp.set(k, v);
     });
@@ -49,6 +87,7 @@ export function ListingFilters({ categories }: { categories: Category[] }) {
           value={params.get("category") ?? "all"}
           onChange={(e) => update({ category: e.target.value })}
           aria-label="Filter by category"
+          disabled={loading}
         >
           <option value="all">All categories</option>
           {categories.map((c) => (
@@ -73,6 +112,15 @@ export function ListingFilters({ categories }: { categories: Category[] }) {
           Search
         </BoldButton>
       </form>
+      {loading ? <p className="mt-2 text-xs font-bold text-neutral-500">Loading categories…</p> : null}
+      {!loading && error ? (
+        <p className="mt-2 text-xs font-bold text-rose-700" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {!loading && !error && categories.length === 0 ? (
+        <p className="mt-2 text-xs font-bold text-neutral-500">No categories available.</p>
+      ) : null}
     </ColorBlock>
   );
 }

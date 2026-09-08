@@ -3,11 +3,18 @@ import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isPublicCreator } from "@/lib/creators/public";
+import { clientKey, rateLimit } from "@/lib/rate-limit";
+import { secureCookieOptions } from "@/lib/security";
 import { z } from "zod";
 
 const schema = z.object({ creatorId: z.string().uuid() });
 
 export async function POST(request: Request) {
+  const limited = rateLimit(clientKey(request, "profile-clicks"), 40);
+  if (!limited.ok) {
+    return NextResponse.json({ ok: true, counted: false });
+  }
+
   const admin = createAdminClient();
   if (!admin) return NextResponse.json({ ok: true });
 
@@ -63,11 +70,6 @@ export async function POST(request: Request) {
   seen[creatorId] = Date.now();
 
   const response = NextResponse.json({ ok: true, counted: true });
-  response.cookies.set("vr_clicks", JSON.stringify(seen), {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
+  response.cookies.set("vr_clicks", JSON.stringify(seen), secureCookieOptions(60 * 60 * 24 * 30));
   return response;
 }

@@ -15,16 +15,23 @@ export const metadata: Metadata = {
 export default async function RankingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ category?: string; sort?: string; page?: string }>;
+  searchParams: Promise<{ category?: string; sort?: string; page?: string; q?: string }>;
 }) {
   const sp = await searchParams;
   const sort = (sp.sort as "bid" | "hype" | "clicks" | "followers" | "newest") || "bid";
   const page = Math.max(1, Number(sp.page || 1));
   const limit = 12;
-  const [{ items, total }, categories] = await Promise.all([
-    getCreators({ category: sp.category, sort, limit, offset: (page - 1) * limit }),
-    getCategories().then((r) => r.items),
+  const [{ items, total }, categoryResult] = await Promise.all([
+    getCreators({
+      search: sp.q,
+      category: sp.category,
+      sort,
+      limit,
+      offset: (page - 1) * limit,
+    }),
+    getCategories(),
   ]);
+  const categories = categoryResult.items;
   const throne = sort === "bid" && page === 1 ? items[0] : null;
   const grid = throne ? items.slice(1) : items;
   const pages = Math.max(1, Math.ceil(total / limit));
@@ -52,9 +59,33 @@ export default async function RankingsPage({
       )}
       {pages > 1 ? (
         <div className="flex justify-center gap-4 text-sm font-bold text-black">
-          {page > 1 ? <Link className="underline" href={`?page=${page - 1}`}>Previous</Link> : null}
+          {page > 1 ? (
+            <Link
+              className="underline"
+              href={`?${new URLSearchParams({
+                ...(sp.q ? { q: sp.q } : {}),
+                ...(sp.category ? { category: sp.category } : {}),
+                ...(sp.sort ? { sort: sp.sort } : {}),
+                page: String(page - 1),
+              }).toString()}`}
+            >
+              Previous
+            </Link>
+          ) : null}
           <span className="text-neutral-500">Page {page} / {pages}</span>
-          {page < pages ? <Link className="underline" href={`?page=${page + 1}`}>Next</Link> : null}
+          {page < pages ? (
+            <Link
+              className="underline"
+              href={`?${new URLSearchParams({
+                ...(sp.q ? { q: sp.q } : {}),
+                ...(sp.category ? { category: sp.category } : {}),
+                ...(sp.sort ? { sort: sp.sort } : {}),
+                page: String(page + 1),
+              }).toString()}`}
+            >
+              Next
+            </Link>
+          ) : null}
         </div>
       ) : null}
     </div>

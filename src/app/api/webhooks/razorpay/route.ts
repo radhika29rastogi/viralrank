@@ -94,10 +94,23 @@ export async function POST(request: Request) {
   if (kind === "ranking_bid") {
     const { data: row } = await admin
       .from("creator_ranking_bids")
-      .select("id, amount, creator_id")
+      .select("id, amount, creator_id, razorpay_order_id")
       .eq("id", pendingId)
       .maybeSingle();
     if (!row) return NextResponse.json({ error: "Unknown bid." }, { status: 404 });
+    if (row.creator_id !== creatorId) {
+      return NextResponse.json({ error: "Creator mismatch." }, { status: 400 });
+    }
+    if (row.razorpay_order_id && row.razorpay_order_id !== payment.order_id) {
+      return NextResponse.json({ error: "Order mismatch." }, { status: 400 });
+    }
+    if (Math.round(Number(row.amount) * 100) !== Number(payment.amount)) {
+      console.error("[webhook/razorpay] bid amount mismatch", {
+        expected: Math.round(Number(row.amount) * 100),
+        paid: payment.amount,
+      });
+      return NextResponse.json({ error: "Amount mismatch." }, { status: 400 });
+    }
 
     const { data, error } = await admin.rpc("apply_verified_ranking_bid", {
       p_creator_id: row.creator_id,
@@ -116,10 +129,23 @@ export async function POST(request: Request) {
   if (kind === "hype") {
     const { data: row } = await admin
       .from("creator_hypes")
-      .select("id, amount, creator_id")
+      .select("id, amount, creator_id, razorpay_order_id")
       .eq("id", pendingId)
       .maybeSingle();
     if (!row) return NextResponse.json({ error: "Unknown hype." }, { status: 404 });
+    if (row.creator_id !== creatorId) {
+      return NextResponse.json({ error: "Creator mismatch." }, { status: 400 });
+    }
+    if (row.razorpay_order_id && row.razorpay_order_id !== payment.order_id) {
+      return NextResponse.json({ error: "Order mismatch." }, { status: 400 });
+    }
+    if (Math.round(Number(row.amount) * 100) !== Number(payment.amount)) {
+      console.error("[webhook/razorpay] hype amount mismatch", {
+        expected: Math.round(Number(row.amount) * 100),
+        paid: payment.amount,
+      });
+      return NextResponse.json({ error: "Amount mismatch." }, { status: 400 });
+    }
 
     const { data, error } = await admin.rpc("apply_verified_hype", {
       p_creator_id: row.creator_id,

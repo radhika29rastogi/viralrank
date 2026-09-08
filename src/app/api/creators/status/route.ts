@@ -53,6 +53,16 @@ export async function GET() {
 
   const isDev = process.env.NODE_ENV !== "production";
 
+  if (!isDev) {
+    return NextResponse.json({
+      configured: status.configured,
+      canSubmitCreators: status.canSubmitCreators && listingPaymentSchemaReady,
+      listingPaymentSchemaReady,
+      categoriesReady,
+      categoryCount,
+    });
+  }
+
   return NextResponse.json({
     configured: status.configured,
     canSubmitCreators: status.canSubmitCreators && listingPaymentSchemaReady,
@@ -73,15 +83,11 @@ export async function GET() {
     serviceRoleKeyFormat: diagnostics.serviceRoleKeyFormat,
     urlIncludesRestV1Path: diagnostics.urlIncludesRestV1Path,
     projectPausedOrMissing: diagnostics.projectPausedOrMissing ?? false,
-    ...(isDev
-      ? {
-          diagnostics: {
-            urlReachable: diagnostics.urlReachable,
-            anonQuery: diagnostics.anonQuery,
-            serviceRoleQuery: diagnostics.serviceRoleQuery,
-            categoriesTable: diagnostics.categoriesTable,
-          },
-        }
-      : {}),
+    diagnostics: {
+      urlReachable: diagnostics.urlReachable,
+      anonQuery: diagnostics.anonQuery,
+      serviceRoleQuery: diagnostics.serviceRoleQuery,
+      categoriesTable: diagnostics.categoriesTable,
+    },
   });
 }
