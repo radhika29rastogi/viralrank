@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { submitCreatorSchema } from "@/lib/validation/schemas";
 import { instagramUrlFromUsername, normalizeInstagramUsername } from "@/lib/format";
 import { isPublicCreator } from "@/lib/creators/public";
+import { getCreators } from "@/lib/queries";
 import {
   listingPaymentSchemaErrorMessage,
   LISTING_PAYMENT_MIGRATION,
@@ -40,7 +41,31 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const username = searchParams.get("username");
   if (!username) {
-    return NextResponse.json({ error: "username is required" }, { status: 400 });
+    const sortParam = searchParams.get("sort");
+    const sort =
+      sortParam === "bid" ||
+      sortParam === "hype" ||
+      sortParam === "clicks" ||
+      sortParam === "followers" ||
+      sortParam === "newest" ||
+      sortParam === "trending"
+        ? sortParam
+        : "trending";
+    const limit = Math.min(24, Math.max(1, Number(searchParams.get("limit")) || 12));
+    const { items, total } = await getCreators({ sort, limit });
+    return NextResponse.json({
+      total,
+      items: items.map((creator) => ({
+        id: creator.id,
+        instagram_username: creator.instagram_username,
+        name: creator.name,
+        profile_image_url: creator.profile_image_url,
+        category: creator.categories?.name ?? null,
+        current_rank: creator.current_rank,
+        hype_count: creator.hype_count,
+        profile_clicks: creator.profile_clicks,
+      })),
+    });
   }
 
   const admin = createAdminClient();

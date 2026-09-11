@@ -1,5 +1,4 @@
 import { FireIcon, TrophyIcon } from "@heroicons/react/24/solid";
-import { ArenaBattle } from "@/components/battle/BattleCard";
 import { Badge, BoldButton, DisplayHeadline } from "@/components/system";
 import { HowItWorks } from "@/components/layout/HowItWorks";
 import { ClosingCta } from "@/components/layout/ClosingCta";
@@ -9,17 +8,28 @@ import { LiveStatsStrip } from "@/components/home/LiveStatsStrip";
 import { FlavorGrid } from "@/components/home/FlavorGrid";
 import { FaqSection } from "@/components/home/FaqSection";
 import { HomeCreatorsSection } from "@/components/home/HomeCreatorsSection";
-import { getArenaFeed, getCategories, getCreators, getLiveStats, getTopTwo } from "@/lib/queries";
+import { HomeLiveBattles } from "@/components/home/HomeLiveBattles";
+import { HomeAnalytics } from "@/components/home/HomeAnalytics";
+import {
+  getArenaFeed,
+  getCategories,
+  getCreators,
+  getLiveBattle,
+  getLiveStats,
+  getTopTwo,
+} from "@/lib/queries";
+
+export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [top, activity, stats, categories, listed] = await Promise.all([
+  const [top, battle, activity, stats, categories, listed] = await Promise.all([
     getTopTwo(),
+    getLiveBattle(),
     getArenaFeed(24),
     getLiveStats(),
     getCategories().then((r) => r.items),
-    getCreators({ sort: "bid", limit: 12 }),
+    getCreators({ sort: "trending", limit: 12 }),
   ]);
-  const carouselCreators = listed.items;
 
   return (
     <>
@@ -48,15 +58,15 @@ export default async function HomePage() {
           </div>
           <HeroCaption />
         </section>
-
-        <ArenaBattle leaders={top} />
       </div>
 
       <ActivityFeed initial={activity} />
 
       <div className="mx-auto max-w-6xl space-y-16 px-4 py-16">
         <HowItWorks />
-        <HomeCreatorsSection creators={carouselCreators} />
+        <HomeCreatorsSection creators={listed.items} />
+        <HomeLiveBattles battle={battle} leaders={top} />
+        <HomeAnalytics stats={stats} />
         <FlavorGrid categories={categories} />
         <FaqSection />
         <ClosingCta />

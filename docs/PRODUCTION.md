@@ -116,3 +116,22 @@ Then smoke-test:
 - `https://www.viralrank.buzz/signup`
 - `https://www.viralrank.buzz/api/categories` → 20 `{id,name,slug}` objects
 - `https://www.viralrank.buzz/api/creators/status` → `{ configured, canSubmitCreators, listingPaymentSchemaReady, categoriesReady, categoryCount }` only (no key formats)
+
+## 6. Creator visibility (homepage / explore / rankings)
+
+A row in `public.creators` is **not** enough to show on the homepage. Public pages query `creators` with explicit columns (not `select *`, not a nested `categories` embed). `creators_public` is a 0007 view used as an optional read path; the app does not depend on it.
+
+A creator is listed only when **both** are true:
+
+- `status = 'active'`
+- `listing_payment_status = 'paid'` (verified ₹199 listing payment)
+
+Inserts start as `status = 'pending_payment'` and `listing_payment_status = 'pending'`. RLS policy `published creators are public` hides those from everyone except the owner (`user_id = auth.uid()`). Do **not** relax that policy.
+
+If paid+active rows exist but Explore/home still show “No creators”:
+
+1. Confirm the query does **not** `select *` or `instagram_clicks` (that column is 0006-only; a missing column or stale PostgREST cache returns `PGRST204` and the UI renders an empty list).
+2. Confirm categories are loaded in a **separate** query. Embedding `categories:category_id(...)` on the creator select can fail the whole listing.
+3. Confirm `GET /api/creators?sort=trending&limit=12` returns `items` (older deploys required `username` and returned 400).
+
+Pending unpaid submissions will still not appear. That is intentional. Do not change production rows by hand to force visibility.

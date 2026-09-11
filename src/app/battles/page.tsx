@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { ArenaBattle } from "@/components/battle/BattleCard";
+
+export const dynamic = "force-dynamic";
 import { Disclaimer } from "@/components/layout/Disclaimer";
 import { DisplayHeadline } from "@/components/system";
 import { getLiveBattle, getTopTwo } from "@/lib/queries";

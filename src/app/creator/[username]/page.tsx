@@ -12,6 +12,8 @@ import { minOvertakeAmount } from "@/lib/ranking";
 import { formatNumber, siteUrl } from "@/lib/format";
 import { getCreatorByUsername } from "@/lib/queries";
 
+export const dynamic = "force-dynamic";
+
 type Props = { params: Promise<{ username: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {

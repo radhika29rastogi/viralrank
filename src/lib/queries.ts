@@ -2,8 +2,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { PUBLIC_CREATOR_STATUS, PUBLIC_LISTING_PAYMENT_STATUS } from "@/lib/creators/public";
 import { ensureCategoriesSeeded } from "@/lib/supabase/seed-categories";
-import type { Battle, Category, Creator, CreatorListingPayment, Hype, RankingBid } from "@/types/database";
+import type { Battle, Category, Creator, Hype, RankingBid } from "@/types/database";
 
+/**
+ * Public listing columns that exist on production without 0006.
+ * Do not select `*` (PostgREST schema cache can include missing `instagram_clicks`).
+ * Do not embed `categories` here — a failed embed zeros the entire creator query.
+ */
 const creatorSelect = `
   id,
   instagram_username,
@@ -20,25 +25,57 @@ const creatorSelect = `
   current_rank,
   rank_set_at,
   profile_clicks,
-  instagram_clicks,
   hype_count,
   total_hype_amount,
   status,
   listing_payment_status,
   published_at,
   created_at,
-  updated_at,
-  categories:category_id ( id, name, slug )
+  updated_at
 `;
 
 const creatorSelectOwner = `
-  *,
-  categories:category_id ( id, name, slug )
+  ${creatorSelect},
+  user_id,
+  contact_email,
+  contact_phone
 `;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ListingClient = any;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function publicCreatorFilters(query: any) {
   return query.eq("status", PUBLIC_CREATOR_STATUS).eq("listing_payment_status", PUBLIC_LISTING_PAYMENT_STATUS);
+}
+
+function logQueryError(context: string, error: { message?: string } | null | undefined) {
+  if (error?.message) {
+    console.error(`[${context}]`, error.message);
+  }
+}
+
+async function getListingClient(): Promise<ListingClient | null> {
+  return createAdminClient() ?? (await createClient());
+}
+
+async function attachCategories(client: ListingClient, rows: Creator[]): Promise<Creator[]> {
+  const ids = [...new Set(rows.map((row) => row.category_id).filter(Boolean))] as string[];
+  if (!ids.length) return rows;
+  const { data, error } = await client.from("categories").select("id, name, slug").in("id", ids);
+  logQueryError("attachCategories", error);
+  const map = new Map(((data as Category[]) ?? []).map((category) => [category.id, category]));
+  return rows.map((row) => ({
+    ...row,
+    categories: row.category_id ? (map.get(row.category_id) ?? null) : null,
+  }));
+}
+
+function asCreators(rows: Creator[] | null | undefined): Creator[] {
+  return (rows ?? []).map((row) => ({
+    ...row,
+    instagram_clicks: row.instagram_clicks ?? 0,
+  }));
 }
 
 function dedupeCategories(rows: Category[]): Category[] {
@@ -87,22 +124,26 @@ export async function getSubmitCategories(): Promise<{ items: Category[]; error?
 }
 
 export async function getCreatorByUsername(username: string) {
-  const supabase = await createClient();
+  const supabase = await getListingClient();
   if (!supabase) return null;
-  const { data } = await publicCreatorFilters(
+  const { data, error } = await publicCreatorFilters(
     supabase.from("creators").select(creatorSelect).eq("instagram_username", username.toLowerCase()),
   ).maybeSingle();
-  return (data as Creator | null) ?? null;
+  logQueryError("getCreatorByUsername", error);
+  const creator = (data as Creator | null) ?? null;
+  if (!creator) return null;
+  const [withCategory] = await attachCategories(supabase, asCreators([creator]));
+  return withCategory ?? null;
 }
 
 export async function getCreators(options: {
   category?: string;
-  sort?: "bid" | "hype" | "clicks" | "followers" | "newest";
+  sort?: "bid" | "hype" | "clicks" | "followers" | "newest" | "trending";
   search?: string;
   limit?: number;
   offset?: number;
 }) {
-  const supabase = await createClient();
+  const supabase = await getListingClient();
   if (!supabase) return { items: [] as Creator[], total: 0 };
 
   let query = publicCreatorFilters(
@@ -130,6 +171,12 @@ export async function getCreators(options: {
     case "hype":
       query = query.order("total_hype_amount", { ascending: false });
       break;
+    case "trending":
+      query = query
+        .order("hype_count", { ascending: false })
+        .order("current_rank", { ascending: true, nullsFirst: false })
+        .order("published_at", { ascending: false, nullsFirst: false });
+      break;
     case "clicks":
       query = query.order("profile_clicks", { ascending: false });
       break;
@@ -147,97 +194,60 @@ export async function getCreators(options: {
 
   const limit = options.limit ?? 24;
   const offset = options.offset ?? 0;
-  const { data, count } = await query.range(offset, offset + limit - 1);
-  return { items: (data as Creator[]) ?? [], total: count ?? 0 };
+  const { data, count, error } = await query.range(offset, offset + limit - 1);
+  logQueryError("getCreators", error);
+  const items = await attachCategories(supabase, asCreators(data as Creator[] | null));
+  return { items, total: count ?? 0 };
 }
 
 export async function getTopTwo(): Promise<Creator[]> {
-  const supabase = await createClient();
+  const supabase = await getListingClient();
   if (!supabase) return [];
 
-  const { data } = await publicCreatorFilters(
+  const { data, error } = await publicCreatorFilters(
     supabase.from("creators").select(creatorSelect),
   )
     .not("current_rank", "is", null)
     .order("current_rank", { ascending: true })
     .limit(2);
 
-  return (data as Creator[]) ?? [];
+  logQueryError("getTopTwo", error);
+  return attachCategories(supabase, asCreators(data as Creator[] | null));
 }
 
-type BidRow = {
+async function getPublicCreatorsByIds(ids: string[]): Promise<Creator[]> {
+  const supabase = await getListingClient();
+  if (!supabase || !ids.length) return [];
+  const { data, error } = await publicCreatorFilters(
+    supabase.from("creators").select(creatorSelect).in("id", ids),
+  );
+  logQueryError("getPublicCreatorsByIds", error);
+  const rows = await attachCategories(supabase, asCreators(data as Creator[] | null));
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return ids.map((id) => byId.get(id)).filter((row): row is Creator => Boolean(row));
+}
+
+type ActivityPaymentRow = {
   id: string;
   amount: number;
   created_at: string;
-  creators:
-    | { instagram_username: string; current_rank: number | null; status: string; listing_payment_status: string }
-    | { instagram_username: string; current_rank: number | null; status: string; listing_payment_status: string }[]
-    | null;
+  creator_id: string;
 };
-
-type HypeRow = {
-  id: string;
-  amount: number;
-  created_at: string;
-  creators: { instagram_username: string; status: string; listing_payment_status: string } | { instagram_username: string; status: string; listing_payment_status: string }[] | null;
-};
-
-export async function getLiveStats() {
-  const empty = { creatorsRanked: 0, movedThisWeek: 0, profileViews: 0 };
-  const supabase = await createClient();
-  if (!supabase) return empty;
-
-  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-
-  const countQuery = publicCreatorFilters(
-    supabase.from("creators").select("id", { count: "exact", head: true }),
-  );
-  const creatorsQuery = publicCreatorFilters(supabase.from("creators").select("profile_clicks"));
-
-  const [{ count }, { data: creators }, { data: bids }, { data: hypes }] = await Promise.all([
-    countQuery,
-    creatorsQuery,
-    supabase
-      .from("creator_ranking_bids")
-      .select("amount")
-      .eq("is_verified", true)
-      .gte("created_at", since),
-    supabase
-      .from("creator_hypes")
-      .select("amount")
-      .eq("is_verified", true)
-      .gte("created_at", since),
-  ]);
-
-  const movedThisWeek =
-    (bids ?? []).reduce((sum, row) => sum + Number(row.amount || 0), 0) +
-    (hypes ?? []).reduce((sum, row) => sum + Number(row.amount || 0), 0);
-  const profileViews = (creators ?? []).reduce(
-    (sum: number, row: { profile_clicks?: number | null }) => sum + Number(row.profile_clicks || 0),
-    0,
-  );
-
-  return {
-    creatorsRanked: count ?? 0,
-    movedThisWeek,
-    profileViews,
-  };
-}
 
 export async function getArenaFeed(limit = 24): Promise<import("@/types/live").ArenaEvent[]> {
-  const supabase = await createClient();
+  const supabase = await getListingClient();
   if (!supabase) return [];
 
   const [{ data: bids }, { data: hypes }, { data: joins }] = await Promise.all([
     supabase
       .from("creator_ranking_bids")
-      .select("id, amount, created_at, creators(instagram_username, current_rank, status, listing_payment_status)")
+      .select("id, amount, created_at, creator_id")
       .eq("is_verified", true)
       .order("created_at", { ascending: false })
       .limit(limit),
     supabase
       .from("creator_hypes")
-      .select("id, amount, created_at, creators(instagram_username, status, listing_payment_status)")
+      .select("id, amount, created_at, creator_id")
       .eq("is_verified", true)
       .order("created_at", { ascending: false })
       .limit(limit),
@@ -248,17 +258,18 @@ export async function getArenaFeed(limit = 24): Promise<import("@/types/live").A
       .limit(limit),
   ]);
 
-  const isPublished = (c: { status?: string; listing_payment_status?: string } | null | undefined) =>
-    c?.status === PUBLIC_CREATOR_STATUS && c?.listing_payment_status === PUBLIC_LISTING_PAYMENT_STATUS;
+  const relatedIds = [
+    ...((bids as ActivityPaymentRow[] | null) ?? []).map((row) => row.creator_id),
+    ...((hypes as ActivityPaymentRow[] | null) ?? []).map((row) => row.creator_id),
+  ];
+  const listed = await getPublicCreatorsByIds([...new Set(relatedIds)]);
+  const listedById = new Map(listed.map((creator) => [creator.id, creator]));
 
   const events: import("@/types/live").ArenaEvent[] = [
-    ...((bids as BidRow[] | null) ?? [])
-      .filter((row) => {
-        const creator = Array.isArray(row.creators) ? row.creators[0] : row.creators;
-        return isPublished(creator);
-      })
+    ...((bids as ActivityPaymentRow[] | null) ?? [])
+      .filter((row) => listedById.has(row.creator_id))
       .map((row) => {
-        const creator = Array.isArray(row.creators) ? row.creators[0] : row.creators;
+        const creator = listedById.get(row.creator_id);
         return {
           id: `bid-${row.id}`,
           kind: "bid" as const,
@@ -268,13 +279,10 @@ export async function getArenaFeed(limit = 24): Promise<import("@/types/live").A
           created_at: row.created_at,
         };
       }),
-    ...((hypes as HypeRow[] | null) ?? [])
-      .filter((row) => {
-        const creator = Array.isArray(row.creators) ? row.creators[0] : row.creators;
-        return isPublished(creator);
-      })
+    ...((hypes as ActivityPaymentRow[] | null) ?? [])
+      .filter((row) => listedById.has(row.creator_id))
       .map((row) => {
-        const creator = Array.isArray(row.creators) ? row.creators[0] : row.creators;
+        const creator = listedById.get(row.creator_id);
         return {
           id: `hype-${row.id}`,
           kind: "hype" as const,
@@ -294,23 +302,96 @@ export async function getArenaFeed(limit = 24): Promise<import("@/types/live").A
   return events.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at)).slice(0, limit);
 }
 
+export async function getLiveStats() {
+  const empty = {
+    creatorsRanked: 0,
+    creatorCount: 0,
+    rankedCount: 0,
+    movedThisWeek: 0,
+    profileViews: 0,
+    totalHype: 0,
+    visitors: null as number | null,
+  };
+  const supabase = await getListingClient();
+  if (!supabase) return empty;
+
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const countQuery = publicCreatorFilters(
+    supabase.from("creators").select("id", { count: "exact", head: true }),
+  );
+  const creatorsQuery = publicCreatorFilters(
+    supabase.from("creators").select("profile_clicks, hype_count, current_rank"),
+  );
+
+  const [
+    { count, error: countError },
+    { data: creators, error: creatorsError },
+    { data: bids, error: bidsError },
+    { data: hypes, error: hypesError },
+  ] = await Promise.all([
+    countQuery,
+    creatorsQuery,
+    supabase
+      .from("creator_ranking_bids")
+      .select("amount")
+      .eq("is_verified", true)
+      .gte("created_at", since),
+    supabase
+      .from("creator_hypes")
+      .select("amount")
+      .eq("is_verified", true)
+      .gte("created_at", since),
+  ]);
+  logQueryError("getLiveStats.count", countError);
+  logQueryError("getLiveStats.creators", creatorsError);
+  logQueryError("getLiveStats.bids", bidsError);
+  logQueryError("getLiveStats.hypes", hypesError);
+
+  const movedThisWeek =
+    (bids ?? []).reduce((sum, row) => sum + Number(row.amount || 0), 0) +
+    (hypes ?? []).reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const rows = (creators ?? []) as Array<{
+    profile_clicks?: number | null;
+    hype_count?: number | null;
+    current_rank?: number | null;
+  }>;
+  const profileViews = rows.reduce((sum, row) => sum + Number(row.profile_clicks || 0), 0);
+  const totalHype = rows.reduce((sum, row) => sum + Number(row.hype_count || 0), 0);
+  const rankedCount = rows.filter((row) => row.current_rank != null && row.current_rank > 0).length;
+  const creatorCount = count ?? 0;
+
+  return {
+    creatorsRanked: creatorCount,
+    creatorCount,
+    rankedCount,
+    movedThisWeek,
+    profileViews,
+    totalHype,
+    visitors: null,
+  };
+}
+
 export async function getLiveBattle(): Promise<Battle | null> {
-  const supabase = await createClient();
+  const supabase = await getListingClient();
   if (!supabase) return null;
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("battles")
-    .select(
-      `
-      *,
-      creator_one:creator_one_id (${creatorSelect}),
-      creator_two:creator_two_id (${creatorSelect})
-    `,
-    )
+    .select("id, creator_one_id, creator_two_id, creator_one_bid, creator_two_bid, winner_id, status, started_at, ended_at, created_at")
     .eq("status", "live")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return (data as Battle | null) ?? null;
+  logQueryError("getLiveBattle", error);
+  const battle = (data as Battle | null) ?? null;
+  if (!battle) return null;
+  const pair = await getPublicCreatorsByIds([battle.creator_one_id, battle.creator_two_id]);
+  const byId = new Map(pair.map((row) => [row.id, row]));
+  return {
+    ...battle,
+    creator_one: byId.get(battle.creator_one_id) ?? null,
+    creator_two: byId.get(battle.creator_two_id) ?? null,
+  };
 }
 
 export async function getRecentActivity(limit = 16) {
@@ -371,7 +452,7 @@ export async function getDashboardData(userId: string) {
   }
 
   return {
-    creators: (creators as Creator[]) ?? [],
+    creators: await attachCategories(supabase, asCreators(creators as Creator[] | null)),
     bids: (bids as RankingBid[]) ?? [],
     hypes: (hypes as Hype[]) ?? [],
     history,
