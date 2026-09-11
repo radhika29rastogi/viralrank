@@ -40,8 +40,17 @@ export function LiveStatsStrip({ initial }: { initial: LiveStats }) {
     async function refresh() {
       const res = await fetch("/api/live-stats");
       if (!res.ok || cancelled) return;
-      const next = (await res.json()) as LiveStats;
-      setStats(next);
+      const next = (await res.json()) as Partial<LiveStats>;
+      if (cancelled) return;
+      setStats({
+        creatorsRanked: next.creatorsRanked ?? 0,
+        creatorCount: next.creatorCount ?? next.creatorsRanked ?? 0,
+        rankedCount: next.rankedCount ?? 0,
+        movedThisWeek: next.movedThisWeek ?? 0,
+        profileViews: next.profileViews ?? 0,
+        totalHype: next.totalHype ?? 0,
+        visitors: next.visitors ?? null,
+      });
     }
 
     const supabase = createBrowserSupabaseClient();

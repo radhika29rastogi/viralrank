@@ -1,7 +1,11 @@
 export type LiveStats = {
   creatorsRanked: number;
+  creatorCount: number;
+  rankedCount: number;
   movedThisWeek: number;
   profileViews: number;
+  totalHype: number;
+  visitors: number | null;
 };
 
 export type ArenaEvent = {

@@ -37,7 +37,7 @@ export type Creator = {
   current_rank: number | null;
   rank_set_at: string | null;
   profile_clicks: number;
-  instagram_clicks: number;
+  instagram_clicks?: number | null;
   hype_count: number;
   total_hype_amount: number;
   status: CreatorStatus;

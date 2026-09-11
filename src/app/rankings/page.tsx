@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+
+export const dynamic = "force-dynamic";
 import { CreatorCard } from "@/components/creator/CreatorCard";
 import { ThroneCard } from "@/components/creator/ThroneCard";
 import { ListingFilters } from "@/components/creator/ListingFilters";

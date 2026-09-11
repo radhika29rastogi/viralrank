@@ -1,6 +1,8 @@
 import type { Creator } from "@/types/database";
 
-export function totalEngagement(creator: Pick<Creator, "hype_count" | "profile_clicks" | "instagram_clicks">) {
+export function totalEngagement(
+  creator: Pick<Creator, "hype_count" | "profile_clicks"> & { instagram_clicks?: number | null },
+) {
   return (
     Number(creator.hype_count || 0) +
     Number(creator.profile_clicks || 0) +

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { CreatorDirectoryCard } from "@/components/creator/CreatorDirectoryCard";
+
+export const dynamic = "force-dynamic";
 import { FlavorGrid } from "@/components/home/FlavorGrid";
 import { FaqSection } from "@/components/home/FaqSection";
 import { Badge, BoldButton, ColorBlock, DisplayHeadline } from "@/components/system";

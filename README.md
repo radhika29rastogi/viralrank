@@ -2,6 +2,10 @@
 
 Paid creator ranking arena. **Submit. Hype. Rank. Go Viral.**
 
+Public homepage, Explore, Rankings, and `/api/creators` only show creators with `status = active` **and** `listing_payment_status = paid`. Inserts start as `pending_payment` / `pending`; RLS keeps those private until listing payment is verified. Unpaid submissions will not appear on the homepage — that is intentional.
+
+Live visibility bug (fixed in app queries, not by changing RLS): production can have paid listings while Explore still looks empty if the query uses `select *` plus an embedded `categories` join. That PostgREST shape fails (missing `instagram_clicks` in the schema cache, or a failed embed) and returns **zero rows**. The activity feed used a narrow column list, so a paid creator could show as “joined the arena” while Trending stayed empty. Public reads now use explicit columns, attach categories in a second query, and never select `instagram_clicks` until `0006` adds it.
+
 ## Stack
 
 Next.js (App Router) · TypeScript · Tailwind · shadcn/ui · Supabase · Razorpay
