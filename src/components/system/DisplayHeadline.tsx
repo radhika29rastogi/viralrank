@@ -12,7 +12,7 @@ function Accent({
       <span
         className={cn(
           "font-marker font-normal",
-          invert ? "text-cream" : "text-hot-pink",
+          invert ? "text-highlight" : "text-hot-pink",
         )}
       >
         {children}
@@ -57,11 +57,11 @@ export function DisplayHeadline({
   return (
     <Tag
       className={cn(
-        "font-extrabold tracking-tight text-black",
+        "font-extrabold tracking-tight text-foreground",
         size === "xl" && "text-6xl leading-[0.9] sm:text-8xl",
         size === "lg" && "text-5xl leading-[0.95] sm:text-7xl",
         size === "md" && "text-4xl leading-[1] sm:text-5xl",
-        invert && "text-cream",
+        invert && "text-highlight",
         align === "center" && "text-center",
         className,
       )}

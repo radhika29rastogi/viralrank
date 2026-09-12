@@ -52,7 +52,12 @@ export async function GET(request: Request) {
         ? sortParam
         : "trending";
     const limit = Math.min(24, Math.max(1, Number(searchParams.get("limit")) || 12));
-    const { items, total } = await getCreators({ sort, limit });
+    const { items, total } = await getCreators({
+      sort,
+      limit,
+      search: searchParams.get("q") ?? undefined,
+      category: searchParams.get("category") ?? undefined,
+    });
     return NextResponse.json({
       total,
       items: items.map((creator) => ({

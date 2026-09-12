@@ -1,18 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Minus, Plus } from "lucide-react";
+import { MinusIcon, PlusIcon } from "@heroicons/react/24/solid";
 import { DisplayHeadline } from "@/components/system";
 import { cn } from "@/lib/utils";
 
 const ITEMS = [
   {
     q: "What is ViralRank?",
-    a: "ViralRank.buzz is a content ranking platform where you submit your memes, videos, posts, and creator profiles. The internet votes with hype, and the best content climbs the live rankings.",
+    a: "ViralRank.buzz is a paid creator ranking arena. Paste an Instagram handle — no signup — we fetch the real profile, then you hype or bid. Highest verified rank bid holds the rank.",
   },
   {
     q: "How does the ranking work?",
-    a: "Creators compete for attention through verified hype and ranking activity. Higher verified performance helps creators climb the rankings.",
+    a: "Rank is the highest verified rank-bid payment in that category. First bid is ₹199. Overtaking #1 costs the current highest bid + ₹100. Hype never moves rank.",
   },
   {
     q: "How much does it cost to submit?",
@@ -44,7 +44,7 @@ export function FaqSection() {
         {ITEMS.map((item, i) => {
           const expanded = open === i;
           return (
-            <div key={item.q} className="rounded-2xl border-[3px] border-black bg-cream shadow-[4px_4px_0_#000]">
+            <div key={item.q} className="rounded-2xl border-[3px] border-border bg-card text-foreground shadow-[4px_4px_0_#000]">
               <h3>
                 <button
                   type="button"
@@ -55,7 +55,7 @@ export function FaqSection() {
                   onClick={() => setOpen(expanded ? null : i)}
                 >
                   {item.q}
-                  {expanded ? <Minus className="size-5 shrink-0" /> : <Plus className="size-5 shrink-0" />}
+                  {expanded ? <MinusIcon className="size-5 shrink-0" /> : <PlusIcon className="size-5 shrink-0" />}
                 </button>
               </h3>
               <div
@@ -66,7 +66,7 @@ export function FaqSection() {
                 className={cn("grid transition-all", expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}
               >
                 {expanded ? (
-                  <p className="px-5 pb-5 text-sm leading-6 text-neutral-600">{item.a}</p>
+                  <p className="px-5 pb-5 text-sm leading-6 text-muted-foreground">{item.a}</p>
                 ) : null}
               </div>
             </div>

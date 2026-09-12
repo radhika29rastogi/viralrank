@@ -1,6 +1,8 @@
+import { CREATOR_IMAGES_BUCKET } from "@/lib/creators/storage";
+
 /** Shared security helpers — redirects, URLs, safe cookies. */
 
-export function safeRedirectPath(value: string | null | undefined, fallback = "/dashboard"): string {
+export function safeRedirectPath(value: string | null | undefined, fallback = "/"): string {
   if (!value) return fallback;
   if (!value.startsWith("/") || value.startsWith("//")) return fallback;
   if (value.includes("://") || value.includes("\\")) return fallback;
@@ -33,10 +35,10 @@ export function isOwnStorageImageUrl(raw: string, supabaseUrl?: string): boolean
     if (url.protocol !== "https:") return false;
     const base = supabaseUrl ? new URL(supabaseUrl).hostname.toLowerCase() : "";
     const host = url.hostname.toLowerCase();
-    if (base && host === base && url.pathname.includes("/storage/v1/object/public/creator-images/")) {
+    if (base && host === base && url.pathname.includes(`/storage/v1/object/public/${CREATOR_IMAGES_BUCKET}/`)) {
       return true;
     }
-    return host.endsWith(".supabase.co") && url.pathname.includes("/creator-images/");
+    return host.endsWith(".supabase.co") && url.pathname.includes(`/${CREATOR_IMAGES_BUCKET}/`);
   } catch {
     return false;
   }

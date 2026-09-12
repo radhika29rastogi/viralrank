@@ -5,5 +5,5 @@ export const HERO_CAPTIONS = [
 ] as const;
 
 export function HeroCaption() {
-  return <p className="mt-4 text-sm text-neutral-500">{HERO_CAPTIONS[0]}</p>;
+  return <p className="mt-4 text-sm text-muted-foreground">{HERO_CAPTIONS[0]}</p>;
 }

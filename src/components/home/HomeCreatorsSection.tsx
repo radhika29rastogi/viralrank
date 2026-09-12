@@ -13,7 +13,7 @@ export function HomeCreatorsSection({ creators }: { creators: Creator[] }) {
         <DisplayHeadline as="h2" align="center" size="md" className="mt-4" accent="Creators">
           Trending Creators
         </DisplayHeadline>
-        <p className="mt-3 text-neutral-500">
+        <p className="mt-3 text-muted-foreground">
           Paid, active listings with avatar, category, hype, and rank.
         </p>
       </div>
@@ -36,8 +36,8 @@ export function HomeCreatorsSection({ creators }: { creators: Creator[] }) {
         </>
       ) : (
         <ColorBlock color="cream" className="py-12 text-center">
-          <p className="font-extrabold text-black">No listed creators yet.</p>
-          <p className="mt-2 text-sm text-neutral-600">
+          <p className="font-extrabold text-foreground">No listed creators yet.</p>
+          <p className="mt-2 text-sm text-muted-foreground">
             Unpaid submissions stay private. Complete the listing payment to appear here.
           </p>
           <div className="mt-6 flex justify-center">

@@ -151,7 +151,7 @@ export function CategorySelect({
               width: menuBox.width,
               maxHeight: menuBox.maxHeight,
             }}
-            className="z-[80] overflow-auto rounded-xl border-[3px] border-black bg-cream p-1 shadow-[4px_4px_0_#000]"
+            className="z-[80] overflow-auto rounded-xl border-[3px] border-border bg-card p-1 shadow-[4px_4px_0_#000]"
           >
             {options.map((c, i) => (
               <li key={c.id}>
@@ -160,8 +160,8 @@ export function CategorySelect({
                   role="option"
                   aria-selected={c.id === value || c.slug === value}
                   className={cn(
-                    "flex w-full rounded-lg px-3 py-2 text-left text-sm font-bold text-black hover:bg-lemon focus:bg-lemon focus:outline-none",
-                    (c.id === value || c.slug === value || i === active) && "bg-lemon",
+                    "flex w-full rounded-lg px-3 py-2 text-left text-sm font-bold text-foreground hover:bg-lemon hover:text-on-accent focus:bg-lemon focus:text-on-accent focus:outline-none",
+                    (c.id === value || c.slug === value || i === active) && "bg-lemon text-on-accent",
                   )}
                   onMouseEnter={() => setActive(i)}
                   onMouseDown={(e) => {
@@ -191,10 +191,10 @@ export function CategorySelect({
         aria-busy={loading || undefined}
         disabled={loading || Boolean(error) || options.length === 0}
         className={cn(
-          "flex h-11 w-full items-center justify-between rounded-xl border-[3px] border-black bg-cream px-3 text-left text-sm font-medium text-black outline-none focus-visible:border-hot-pink focus-visible:ring-3 focus-visible:ring-hot-pink/40 disabled:cursor-not-allowed disabled:opacity-70",
+          "flex h-11 w-full items-center justify-between rounded-xl border-[3px] border-border bg-input-bg px-3 text-left text-sm font-medium text-input-text outline-none focus-visible:border-hot-pink focus-visible:ring-3 focus-visible:ring-hot-pink/40 disabled:cursor-not-allowed disabled:opacity-70",
           open && "border-hot-pink",
           invalid && "border-rose-600",
-          !selected && !loading && !error && "text-neutral-500",
+          !selected && !loading && !error && "text-muted-foreground",
         )}
         onClick={(e) => {
           e.preventDefault();
@@ -224,7 +224,7 @@ export function CategorySelect({
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-xs font-bold text-rose-700">{error}</p>
           {onRetry ? (
-            <button type="button" className="text-xs font-bold text-black underline" onClick={onRetry}>
+            <button type="button" className="text-xs font-bold text-foreground underline" onClick={onRetry}>
               Retry
             </button>
           ) : null}

@@ -25,7 +25,7 @@ export function HomeLiveBattles({
         <DisplayHeadline as="h2" align="center" size="md" className="mt-4" accent="Battles">
           Live Battles
         </DisplayHeadline>
-        <p className="mt-3 text-neutral-500">
+        <p className="mt-3 text-muted-foreground">
           {pair.length >= 2
             ? "Active #1 vs #2 on the paid ranking."
             : pair.length === 1

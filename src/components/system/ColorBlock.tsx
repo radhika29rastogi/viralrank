@@ -16,11 +16,13 @@ export function ColorBlock({
   className?: string;
   children: React.ReactNode;
 }) {
+  const flips = color === "cream";
   return (
     <div
       className={cn(
-        "relative border-[4px] border-black shadow-[4px_4px_0_#000]",
+        "relative border-[4px] border-border shadow-[4px_4px_0_#000]",
         brandColors[color],
+        flips ? "text-foreground" : "text-on-accent",
         radius === "3xl" ? "rounded-3xl" : "rounded-2xl",
         padding === "lg" && "p-6 sm:p-8",
         padding === "md" && "p-4 sm:p-6",

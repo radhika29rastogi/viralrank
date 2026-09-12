@@ -1,25 +1,24 @@
-/** Shared platform copy — creator discovery & premium profile services. */
+/** Shared platform copy — paid creator ranking arena. */
 
 export const PLATFORM_NAME = "ViralRank.buzz";
 
-export const PLATFORM_TAGLINE = "Discover creators. Showcase profiles. Go viral.";
+export const PLATFORM_TAGLINE = "Submit. Hype. Rank. Go Viral.";
 
-export const PREMIUM_PROFILE_TITLE = "Premium Creator Profile";
+export const PREMIUM_PROFILE_TITLE = "Rank bid";
 
 export const PREMIUM_PROFILE_FEATURES = [
-  "Enhanced creator profile presentation",
-  "Profile visibility features",
-  "Profile verification review",
-  "Promotional profile tools",
+  "Verified rank bid on the public leaderboard",
+  "Instagram profile snapshot (name, photo, followers)",
+  "Hype support that never changes rank",
+  "Magic manage link emailed with the receipt",
 ] as const;
 
 export const PAYMENT_DISCLAIMER =
-  "Payment is for optional digital profile and promotional services. Payment does not guarantee any specific ranking or ranking position on ViralRank.";
+  "Rank bids and hype are non-refundable regardless of final rank. Highest verified rank bid holds the position.";
 
 export const RANKING_INDEPENDENCE_DISCLAIMER =
-  "Creator rankings on ViralRank are determined independently based on platform criteria and are not influenced by premium profile payments.";
+  "Rank is the highest verified rank-bid payment. Hype never changes rank. A verified payment does not guarantee #1 if another bid is higher.";
 
-export const RAZORPAY_LISTING_DESCRIPTION =
-  "Premium digital creator profile and visibility services";
+export const RAZORPAY_LISTING_DESCRIPTION = "ViralRank rank bid or hype";
 
 export const SUPPORT_EMAIL = "support@viralrank.buzz";

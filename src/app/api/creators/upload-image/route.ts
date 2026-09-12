@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
+import { CREATOR_IMAGES_BUCKET } from "@/lib/creators/storage";
 import { clientKey, rateLimit } from "@/lib/rate-limit";
 import { detectImageMime } from "@/lib/security";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -8,12 +9,37 @@ import { createClient } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 
 const MAX_BYTES = 5 * 1024 * 1024;
+const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 function extensionForMime(mime: string) {
   if (mime === "image/jpeg") return "jpg";
   if (mime === "image/png") return "png";
   if (mime === "image/webp") return "webp";
   return null;
+}
+
+function isUploadFile(value: FormDataEntryValue | null): value is File {
+  return typeof File !== "undefined" && value instanceof File;
+}
+
+function storageErrorFields(error: {
+  message?: string;
+  name?: string;
+  status?: number;
+  statusCode?: string;
+  code?: string;
+  originalError?: unknown;
+  cause?: unknown;
+}) {
+  const cause = error.originalError ?? error.cause;
+  return {
+    message: error.message,
+    name: error.name,
+    status: error.status,
+    statusCode: error.statusCode,
+    code: error.code,
+    cause: cause === undefined || cause === null ? undefined : String(cause),
+  };
 }
 
 export async function POST(request: Request) {
@@ -47,7 +73,7 @@ export async function POST(request: Request) {
   }
 
   const file = formData.get("file");
-  if (!(file instanceof File)) {
+  if (!isUploadFile(file)) {
     return NextResponse.json({ error: "Choose an image file to upload." }, { status: 400 });
   }
 
@@ -57,7 +83,7 @@ export async function POST(request: Request) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const detected = detectImageMime(buffer);
-  if (!detected) {
+  if (!detected || !ALLOWED_MIME.has(detected)) {
     return NextResponse.json(
       { error: "File content is not a valid JPG, PNG, or WebP image." },
       { status: 400 },
@@ -70,21 +96,40 @@ export async function POST(request: Request) {
   }
 
   const path = `${user.id}/${randomUUID()}.${ext}`;
+  if (!/^[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|png|webp)$/i.test(path)) {
+    return NextResponse.json({ error: "Image upload failed. Please try again." }, { status: 500 });
+  }
 
-  const { error: uploadError } = await admin.storage.from("creator-images").upload(path, buffer, {
+  // File/Blob so storage-js sends multipart/form-data (standard upload), not a raw Uint8Array body.
+  const uploadFile = new File([new Uint8Array(buffer)], `upload.${ext}`, { type: detected });
+
+  const { error: uploadError } = await admin.storage.from(CREATOR_IMAGES_BUCKET).upload(path, uploadFile, {
     contentType: detected,
     upsert: false,
   });
 
   if (uploadError) {
-    console.error("[upload-image] storage failed");
+    const details = storageErrorFields(uploadError);
+    console.error("[upload-image] storage failed", {
+      ...details,
+      fileSize: file.size,
+      fileType: file.type,
+      detectedMime: detected,
+      bucket: CREATOR_IMAGES_BUCKET,
+      path,
+      bodyKind: "File",
+      adminConfigured: true,
+    });
     return NextResponse.json(
-      { error: "Could not upload image. Ensure migration 0006 is applied." },
-      { status: 500 },
+      {
+        error: details.message || "Image upload failed. Please try again.",
+        storage: details,
+      },
+      { status: uploadError.status && uploadError.status >= 400 ? uploadError.status : 500 },
     );
   }
 
-  const { data: publicUrl } = admin.storage.from("creator-images").getPublicUrl(path);
+  const { data: publicUrl } = admin.storage.from(CREATOR_IMAGES_BUCKET).getPublicUrl(path);
 
   return NextResponse.json({
     ok: true,

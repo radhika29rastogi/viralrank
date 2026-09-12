@@ -34,8 +34,10 @@ export type Creator = {
   average_views: number | null;
   instagram_data_source: InstagramDataSource;
   current_highest_bid: number;
+  current_rank_bid?: number;
   current_rank: number | null;
   rank_set_at: string | null;
+  stats_fetched_at?: string | null;
   profile_clicks: number;
   instagram_clicks?: number | null;
   hype_count: number;

@@ -10,6 +10,7 @@ import { formatCompactCount } from "@/lib/creator-stats";
 export function HypeButton({
   creatorId,
   creatorName,
+  instagramUsername,
   currentHighestBid,
   initialCount,
   label,
@@ -17,6 +18,7 @@ export function HypeButton({
 }: {
   creatorId: string;
   creatorName: string;
+  instagramUsername: string;
   currentHighestBid: number;
   initialCount?: number;
   initialRank?: number | null;
@@ -37,7 +39,7 @@ export function HypeButton({
         icon={<FireIcon className="size-4" />}
         onClick={() => setOpen(true)}
       >
-        {label ?? (compact ? `🔥 Hype${countLabel}` : `🔥 Hype from ₹${MIN_HYPE}${countLabel}`)}
+        {label ?? (compact ? `Hype this creator ₹${MIN_HYPE}+${countLabel}` : `Hype this creator ₹${MIN_HYPE}+`)}
       </BoldButton>
       <PaymentModal
         key={`${open}-hype`}
@@ -46,6 +48,7 @@ export function HypeButton({
         kind="hype"
         creatorId={creatorId}
         creatorName={creatorName}
+        instagramHandle={instagramUsername}
         currentHighestBid={currentHighestBid}
       />
     </>

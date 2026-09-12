@@ -19,7 +19,7 @@ const buttonVariants = cva(
           "border-2 border-ink bg-coral text-ink hover:-translate-y-0.5 chunky-shadow",
         link: "text-ink underline-offset-4 hover:underline",
         bid: "border-2 border-ink bg-gold text-ink font-black uppercase tracking-wide hover:-translate-y-1 chunky-shadow",
-        hype: "border-2 border-ink bg-hot-pink text-cream font-black uppercase tracking-wide hover:-translate-y-1 chunky-shadow",
+        hype: "border-2 border-ink bg-hot-pink text-on-accent font-black uppercase tracking-wide hover:-translate-y-1 chunky-shadow",
       },
       size: {
         default:

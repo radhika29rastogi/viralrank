@@ -29,10 +29,10 @@ export function BrandLogo({
         alt=""
         width={dim.img}
         height={dim.img}
-        className="size-8 rounded-lg border-2 border-black shadow-[2px_2px_0_#000] sm:size-10"
+        className="size-8 rounded-lg border-2 border-border shadow-[2px_2px_0_#000] sm:size-10"
         priority
       />
-      <span className={cn("font-extrabold tracking-tight text-black", dim.text)}>
+      <span className={cn("font-extrabold tracking-tight text-foreground", dim.text)}>
         ViralRank.buzz
       </span>
     </Link>

@@ -2,6 +2,10 @@ import { z } from "zod";
 import { isValidInstagramUsername } from "@/lib/instagram/username";
 import { isAllowedInstagramUrl } from "@/lib/security";
 import { MIN_HYPE, MIN_RANKING_BID } from "@/lib/ranking";
+import {
+  MAX_STANDARD_ORDER_PAISE,
+  MIN_STANDARD_ORDER_PAISE,
+} from "@/lib/razorpay/constants";
 
 const email = z.email("Enter a valid email");
 
@@ -35,6 +39,24 @@ export const paymentOrderSchema = z.object({
   amount: z.coerce.number().positive(),
   supporterName: z.string().trim().min(1).max(80),
   supporterEmail: email,
+});
+
+export const arenaOrderSchema = z.object({
+  instagram_handle: z.string().trim().min(1).max(200),
+  type: z.enum(["rank_bid", "hype"]),
+  amount: z.coerce.number().int().positive().optional(),
+  category: z.string().trim().max(80).optional(),
+  coupon_code: z.string().trim().max(40).optional(),
+});
+
+export const standardCheckoutOrderSchema = z.object({
+  amount: z.coerce
+    .number()
+    .int()
+    .min(MIN_STANDARD_ORDER_PAISE, "Amount must be at least 100 paise.")
+    .max(MAX_STANDARD_ORDER_PAISE, "Amount exceeds the checkout limit."),
+  currency: z.string().trim().length(3).optional(),
+  receipt: z.string().trim().min(1).max(40).optional(),
 });
 
 export const rankingAmountSchema = z.coerce.number().min(MIN_RANKING_BID);

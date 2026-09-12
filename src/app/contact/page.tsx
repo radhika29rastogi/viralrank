@@ -20,23 +20,23 @@ export default function ContactPage() {
     <div className="mx-auto max-w-3xl space-y-8 px-4 py-12">
       <DisplayHeadline size="md">Contact Us</DisplayHeadline>
       <ColorBlock color="cream" padding="lg" className="space-y-6">
-        <div className="space-y-2 text-sm text-neutral-700">
+        <div className="space-y-2 text-sm text-muted-foreground">
           <p>
-            <span className="font-bold text-black">Platform:</span> {PLATFORM_NAME}
+            <span className="font-bold text-foreground">Platform:</span> {PLATFORM_NAME}
           </p>
           <p>
-            <span className="font-bold text-black">Support email:</span>{" "}
+            <span className="font-bold text-foreground">Support email:</span>{" "}
             <a href={`mailto:${SUPPORT_EMAIL}`} className="font-bold underline">
               {SUPPORT_EMAIL}
             </a>
           </p>
           <p>
-            <span className="font-bold text-black">Response time:</span> We aim to respond within 2–3
+            <span className="font-bold text-foreground">Response time:</span> We aim to respond within 2–3
             business days.
           </p>
         </div>
         {sent ? (
-          <p className="text-sm font-bold text-black">
+          <p className="text-sm font-bold text-foreground">
             Thank you — your message has been noted. For urgent payment issues, email {SUPPORT_EMAIL}{" "}
             directly.
           </p>

@@ -1,6 +1,6 @@
 # Production launch — ViralRank.buzz
 
-Do not treat the site as production-ready until confirmation email and password-reset email have been received and the links work.
+There is **no product login**. Treat the site as production-ready when Instagram lookup, Razorpay webhook, and `NEXT_PUBLIC_SITE_URL` are live. Optional Resend receipts need a real `RESEND_API_KEY`.
 
 ## 1. Environment variables (Vercel)
 
@@ -16,6 +16,10 @@ Add these in **Vercel → Project → Settings → Environment Variables** for *
 | `RAZORPAY_KEY_SECRET` | Yes (payments) | **Secret** | Vercel + local `.env.local` | Matching Key Secret |
 | `NEXT_PUBLIC_RAZORPAY_KEY_ID` | Yes (payments) | Public | Vercel + local `.env.local` | **Must equal** `RAZORPAY_KEY_ID` |
 | `RAZORPAY_WEBHOOK_SECRET` | **Yes in production** | **Secret** | Vercel + local `.env.local` | Razorpay webhook signing secret |
+| `RAPIDAPI_KEY` | Yes (lookup) | **Secret** | Vercel + local `.env.local` | RapidAPI Instagram Looter key — server only |
+| `RAPIDAPI_HOST` | Yes (lookup) | Public host string | Vercel + local `.env.local` | `instagram-looter2.p.rapidapi.com` |
+| `RESEND_API_KEY` | No | **Secret** | Vercel + local `.env.local` | Receipt + `/manage/{token}` email |
+| `ADMIN_SECRET` | No | **Secret** | Vercel + local `.env.local` | `/admin?key=` only — no login |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | No | Public | Leave empty for launch | Only if a Turnstile widget is on `/submit` |
 | `TURNSTILE_SECRET_KEY` | No | **Secret** | Leave empty for launch | Only with the site key + widget |
 
@@ -25,25 +29,9 @@ Add these in **Vercel → Project → Settings → Environment Variables** for *
 
 Project currently used by this app: host `tpadjhjjvhtijmxkzhdo.supabase.co` (confirm in Project Settings → API).
 
-### Authentication → URL Configuration
+### Authentication
 
-- **Site URL:** `https://viralrank.buzz` (do **not** set Site URL to localhost)
-- **Redirect URLs:**
-  - `https://viralrank.buzz/auth/callback`
-  - `https://www.viralrank.buzz/auth/callback`
-  - `http://localhost:3000/auth/callback` (local only)
-
-### Authentication → Providers → Email
-
-- Enable email signup
-- Enable **Confirm email**
-- Password reset stays enabled (default)
-
-### Authentication → Emails / SMTP
-
-Supabase built-in mail is rate-limited and often lands in spam. For launch, configure a real SMTP provider (Resend, Amazon SES, Postmark, or similar) under **Project Settings → Authentication → SMTP**.
-
-Until a confirmation email and a reset email have been received, email auth is **not verified**.
+Product flows do **not** use Supabase Auth. Leave email signup disabled if you are not using leftover admin tooling. Receipts go through Resend (`RESEND_API_KEY`), not Supabase confirmation emails.
 
 ### SQL editor — migrations (in order, skip already-applied)
 
@@ -53,7 +41,8 @@ Until a confirmation email and a reset email have been received, email auth is *
 4. `supabase/migrations/0006_platform_upgrade.sql`
 5. `supabase/migrations/0007_security_hardening.sql`
 6. `supabase/migrations/0008_hide_payment_pii.sql` (**new — required before launch**)
-7. Only if you previously applied a review-queue migration: `0005_restore_listing_auto_publish.sql`
+7. `supabase/migrations/0010_no_auth_pay_to_rank.sql` (**required** before deploying the no-auth submit/homepage)
+8. Only if you previously applied a review-queue migration: `0005_restore_listing_auto_publish.sql`
 
 Do **not** run `supabase/seed/demo-creators.sql` on production unless you intentionally want demo listings.
 
@@ -70,22 +59,21 @@ All three must be `false`.
 
 ### Storage
 
-Migration `0006` creates bucket `creator-images`. Confirm it exists under **Storage**.
+The upload API uses bucket **`creator-images`** (public, 5 MB, jpeg/png/webp). That bucket is created by the storage block in `supabase/migrations/0006_platform_upgrade.sql`, or the idempotent excerpt `supabase/migrations/0009_creator_images_storage.sql` if 0006 has not been applied in full.
 
-### Admin user
+Confirm **Storage → creator-images** exists. This project’s production bucket was created from that 0006 storage excerpt. Do not make the bucket private; `getPublicUrl` is what the listing form stores.
 
-```sql
-update public.profiles
-set is_admin = true
-where id = '<auth user uuid>';
-```
+### Admin
+
+Set `ADMIN_SECRET` and open `/admin?key=<secret>`. There is no login-gated admin.
 
 ## 3. Razorpay
 
-1. Use a **live** Key ID + Key Secret pair in Vercel production.
-2. Webhook URL: `https://www.viralrank.buzz/api/webhooks/razorpay`
-3. Events: `payment.captured`, `order.paid`
-4. Copy the webhook secret into `RAZORPAY_WEBHOOK_SECRET`
+1. Use a **live** Key ID + Key Secret pair in Vercel production. `NEXT_PUBLIC_RAZORPAY_KEY_ID` must match `RAZORPAY_KEY_ID`. Never put `RAZORPAY_KEY_SECRET` in a `NEXT_PUBLIC_` variable.
+2. Local Standard Checkout test: `/checkout` → `POST /api/create-order` `{ amount }` (paise) → Razorpay modal → `POST /api/verify-payment` HMAC. Details: [RAZORPAY.md](./RAZORPAY.md).
+3. Webhook URL: `https://www.viralrank.buzz/api/webhooks/razorpay`
+4. Events: `payment.captured`, `order.paid`
+5. Copy the webhook secret into `RAZORPAY_WEBHOOK_SECRET`
 
 ## 4. Domain / Vercel
 
@@ -113,7 +101,9 @@ Then smoke-test:
 
 - `https://www.viralrank.buzz/`
 - `https://www.viralrank.buzz/explore`
-- `https://www.viralrank.buzz/signup`
+- `https://www.viralrank.buzz/submit`
+- `https://www.viralrank.buzz/stats`
+- `https://www.viralrank.buzz/rules`
 - `https://www.viralrank.buzz/api/categories` → 20 `{id,name,slug}` objects
 - `https://www.viralrank.buzz/api/creators/status` → `{ configured, canSubmitCreators, listingPaymentSchemaReady, categoriesReady, categoryCount }` only (no key formats)
 

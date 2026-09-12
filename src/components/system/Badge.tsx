@@ -30,9 +30,9 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border-[3px] border-black px-3 py-1 text-xs font-extrabold uppercase tracking-wide shadow-[4px_4px_0_#000]",
+        "inline-flex items-center gap-1 rounded-full border-[3px] border-border px-3 py-1 text-xs font-extrabold uppercase tracking-wide shadow-[4px_4px_0_#000]",
         brandColors[color],
-        onBlack ? "text-cream" : "text-black",
+        onBlack ? "text-highlight" : "text-on-accent",
         rotateClass[rotate],
         floatClass[float],
         pulse && "badge-pulse",

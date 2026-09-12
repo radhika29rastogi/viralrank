@@ -4,17 +4,19 @@ import "./globals.css";
 import { Providers } from "@/components/layout/Providers";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
-import { getCurrentUser } from "@/lib/queries";
+import { VisitBeacon } from "@/components/layout/VisitBeacon";
 import { siteUrl } from "@/lib/format";
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
   variable: "--font-plus",
+  display: "swap",
 });
 
 const caveat = Caveat({
   subsets: ["latin"],
   variable: "--font-caveat",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -39,11 +41,9 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: LayoutProps<"/">) {
-  const { user } = await getCurrentUser();
-
   return (
     <html
       lang="en"
@@ -52,7 +52,8 @@ export default async function RootLayout({
     >
       <body className="flex min-h-full flex-col font-sans">
         <Providers>
-          <SiteHeader signedIn={Boolean(user)} />
+          <VisitBeacon />
+          <SiteHeader />
           <main className="flex-1">{children}</main>
           <SiteFooter />
         </Providers>

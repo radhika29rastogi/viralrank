@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import type Razorpay from "razorpay";
 import { z } from "zod";
 import { clientKey, rateLimit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRazorpay, getRazorpayEnvStatus } from "@/lib/razorpay/client";
 import { createListingPaymentOrder } from "@/lib/razorpay/listing-payment";
+import { createStandardRazorpayOrder } from "@/lib/razorpay/standard-order";
 import { createClient } from "@/lib/supabase/server";
+import { standardCheckoutOrderSchema } from "@/lib/validation/schemas";
 
 export const runtime = "nodejs";
 
@@ -49,16 +52,7 @@ export async function POST(request: Request) {
 
   const listingParsed = listingOrderSchema.safeParse(json);
   if (!listingParsed.success) {
-    return NextResponse.json(
-      {
-        success: false,
-        error:
-          listingParsed.error.issues[0]?.message ??
-          "Invalid request. Send listing fields { creatorId, payerName, payerEmail }.",
-        code: "invalid_listing_order",
-      },
-      { status: 400 },
-    );
+    return createStandardOrder(json, razorpay);
   }
 
   const admin = createAdminClient();
@@ -126,6 +120,44 @@ export async function POST(request: Request) {
     listing_amount_inr: result.finalAmountInr,
     original_amount_inr: result.originalAmountInr,
     discount_inr: result.discountInr,
+    receipt: result.receipt,
+  });
+}
+
+async function createStandardOrder(json: unknown, razorpay: Razorpay) {
+  const parsed = standardCheckoutOrderSchema.safeParse(json);
+  if (!parsed.success) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          parsed.error.issues[0]?.message ??
+          "Invalid request. Send listing fields { creatorId, payerName, payerEmail } or Standard Checkout { amount, currency, receipt }.",
+        code: "invalid_order",
+      },
+      { status: 400 },
+    );
+  }
+
+  const result = await createStandardRazorpayOrder(razorpay, parsed.data);
+  if (!result.ok) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: result.error,
+        details: "details" in result ? result.details : undefined,
+        code: "code" in result ? result.code : undefined,
+      },
+      { status: result.status },
+    );
+  }
+
+  return NextResponse.json({
+    success: true,
+    order_id: result.order_id,
+    amount: result.amount,
+    currency: result.currency,
+    key_id: result.key_id,
     receipt: result.receipt,
   });
 }

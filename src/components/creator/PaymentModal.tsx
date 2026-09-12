@@ -5,6 +5,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { openRazorpayCheckout } from "@/lib/razorpay/checkout-client";
+import { RAZORPAY_CHECKOUT_THEME } from "@/lib/design";
 import { HYPE_PRESETS, minOvertakeAmount, validateHypeAmount, validateRankingBid } from "@/lib/ranking";
 import type { PaymentKind } from "@/types/database";
 
@@ -28,6 +30,7 @@ export function PaymentModal({
   kind,
   creatorId,
   creatorName,
+  instagramHandle,
   currentHighestBid,
 }: {
   open: boolean;
@@ -35,6 +38,7 @@ export function PaymentModal({
   kind: PaymentKind;
   creatorId: string;
   creatorName: string;
+  instagramHandle?: string;
   currentHighestBid: number;
 }) {
   const minBid = minOvertakeAmount(currentHighestBid);
@@ -54,13 +58,73 @@ export function PaymentModal({
       setError(check.message);
       return;
     }
-    if (!name.trim() || !email.trim()) {
+    if (!(kind === "hype" && instagramHandle) && (!name.trim() || !email.trim())) {
       setError("Name and email are required so we can record this payment.");
       return;
     }
 
     setStatus("paying");
     try {
+      if (kind === "hype" && instagramHandle) {
+        const res = await fetch("/api/orders", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            instagram_handle: instagramHandle,
+            type: "hype",
+            amount,
+          }),
+        });
+        const json = (await res.json()) as {
+          error?: string;
+          order_id?: string;
+          key?: string;
+          amount?: number;
+        };
+        if (!res.ok || !json.order_id || !json.key) {
+          setError(json.error ?? "Payment could not be completed. Please try again.");
+          setStatus("idle");
+          return;
+        }
+        await openRazorpayCheckout({
+          key: json.key,
+          amount: json.amount ?? amount * 100,
+          currency: "INR",
+          order_id: json.order_id,
+          name: "ViralRank.buzz",
+          description: `Hype ${creatorName}`,
+          theme: { color: RAZORPAY_CHECKOUT_THEME },
+          prefill: {},
+          onSuccess: async () => {
+            setStatus("verifying");
+            const started = Date.now();
+            while (Date.now() - started < 20000) {
+              const statusRes = await fetch(`/api/payments/${json.order_id}/status`);
+              const body = (await statusRes.json()) as { status?: string };
+              if (body.status === "verified") {
+                setStatus("done");
+                window.location.reload();
+                return;
+              }
+              if (body.status === "failed") {
+                setError("Payment could not be completed. Please try again.");
+                setStatus("idle");
+                return;
+              }
+              await new Promise((r) => setTimeout(r, 1200));
+            }
+            setError("We couldn't verify this payment. Your ranking has not been updated.");
+            setStatus("idle");
+          },
+          onDismiss: () => setStatus("idle"),
+          onFailed: (message) => {
+            setError(message);
+            setStatus("idle");
+          },
+        });
+        return;
+      }
+
       const res = await fetch("/api/payments/order", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -148,7 +212,7 @@ export function PaymentModal({
               <button
                 key={preset}
                 type="button"
-                className={`rounded-full border-2 border-ink px-3 py-1 text-sm font-black ${amount === preset ? "bg-hot-pink text-cream" : "bg-lime"}`}
+                className={`rounded-full border-2 border-ink px-3 py-1 text-sm font-black ${amount === preset ? "bg-hot-pink text-on-accent" : "bg-lime text-on-accent"}`}
                 onClick={() => setAmount(preset)}
               >
                 ₹{preset.toLocaleString("en-IN")}
@@ -167,14 +231,18 @@ export function PaymentModal({
               onChange={(e) => setAmount(Number(e.target.value))}
             />
           </div>
-          <div>
-            <Label htmlFor="supporter-name">Your name</Label>
-            <Input id="supporter-name" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div>
-            <Label htmlFor="supporter-email">Email</Label>
-            <Input id="supporter-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </div>
+          {kind === "hype" && instagramHandle ? null : (
+            <>
+              <div>
+                <Label htmlFor="supporter-name">Your name</Label>
+                <Input id="supporter-name" value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="supporter-email">Email</Label>
+                <Input id="supporter-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </div>
+            </>
+          )}
         </div>
         {error ? <p className="text-sm font-bold text-rose-700">{error}</p> : null}
         {status === "verifying" ? (

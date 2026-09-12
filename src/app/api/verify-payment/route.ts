@@ -13,8 +13,8 @@ const verifyPaymentSchema = z.object({
   razorpay_payment_id: z.string().min(1),
   razorpay_order_id: z.string().min(1),
   razorpay_signature: z.string().min(1),
-  creator_id: z.uuid(),
-  pending_id: z.uuid(),
+  creator_id: z.uuid().optional(),
+  pending_id: z.uuid().optional(),
 });
 
 export async function POST(request: Request) {
@@ -57,6 +57,17 @@ export async function POST(request: Request) {
     console.error("[verify-payment] signature mismatch", { orderId, paymentId });
     return NextResponse.json(
       { success: false, verified: false, error: "Payment verification failed." },
+      { status: 400 },
+    );
+  }
+
+  if (!creatorId && !pendingId) {
+    return NextResponse.json({ success: true, verified: true });
+  }
+
+  if (!creatorId || !pendingId) {
+    return NextResponse.json(
+      { success: false, verified: false, error: "Missing payment fields." },
       { status: 400 },
     );
   }

@@ -9,6 +9,11 @@ import { Label } from "@/components/ui/label";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { safeRedirectPath } from "@/lib/security";
 import {
+  CREATOR_LISTING_PATH,
+  destinationForOwnedCreator,
+  shouldResolveCreatorHome,
+} from "@/lib/auth/post-auth";
+import {
   EXISTING_EMAIL_MESSAGE,
   mapAuthError,
   normalizeAuthEmail,
@@ -17,7 +22,10 @@ import {
 export function AuthForm({ mode }: { mode: "login" | "signup" | "reset" }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = safeRedirectPath(searchParams.get("redirect"));
+  const redirectTo = safeRedirectPath(
+    searchParams.get("redirect"),
+    mode === "signup" ? CREATOR_LISTING_PATH : "/dashboard",
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -62,7 +70,18 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "reset" }) {
           setError(mapAuthError(err, "Could not sign in. Check your email and password.", "login"));
           return;
         }
-        router.push(redirectTo);
+        if (!shouldResolveCreatorHome(redirectTo)) {
+          router.push(redirectTo);
+          router.refresh();
+          return;
+        }
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        const { data: existing } = user
+          ? await supabase.from("creators").select("id").eq("user_id", user.id).limit(1).maybeSingle()
+          : { data: null };
+        router.push(destinationForOwnedCreator(Boolean(existing)));
         router.refresh();
         return;
       }
@@ -74,7 +93,9 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "reset" }) {
           password,
           options: {
             data: { display_name: name.trim() },
-            emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
+            emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(
+              shouldResolveCreatorHome(redirectTo) ? CREATOR_LISTING_PATH : redirectTo,
+            )}`,
           },
         });
         if (err) {
@@ -91,7 +112,9 @@ export function AuthForm({ mode }: { mode: "login" | "signup" | "reset" }) {
         if (data.session && !data.user?.email_confirmed_at) {
           await supabase.auth.signOut();
         }
-        setMessage("Account created! Check your email to confirm your account.");
+        setMessage(
+          "Account created! Check your email and click the verification link. You will be signed in and taken to the creator listing form.",
+        );
         return;
       }
 

@@ -1,17 +1,22 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { AdminPanel } from "@/components/admin/AdminPanel";
 import { DisplayHeadline } from "@/components/system";
-import { getCategories, getCurrentUser } from "@/lib/queries";
+import { getCategories } from "@/lib/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Creator, Hype, RankingBid } from "@/types/database";
 
-export const metadata: Metadata = { title: "Admin" };
+export const metadata: Metadata = { title: "Admin", robots: { index: false, follow: false } };
 
-export default async function AdminPage() {
-  const { user, isAdmin } = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (!isAdmin) redirect("/");
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ key?: string }>;
+}) {
+  const { key } = await searchParams;
+  const secret = process.env.ADMIN_SECRET?.trim();
+  if (!secret || key !== secret) notFound();
+
   const { items: categories } = await getCategories();
   const admin = createAdminClient();
   let creators: Creator[] = [];

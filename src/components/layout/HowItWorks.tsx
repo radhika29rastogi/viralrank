@@ -6,8 +6,8 @@ const steps = [
     n: "01",
     icon: "➕",
     title: "Add a creator",
-    body: "Enter an Instagram profile. Anyone can submit.",
-    tag: "Free",
+    body: "Paste an Instagram URL. We fetch the real name, photo, and followers. Anyone can submit — no account.",
+    tag: "No login",
   },
   {
     color: "coral" as const,
@@ -30,7 +30,7 @@ const steps = [
 export function HowItWorks() {
   return (
     <section>
-      <h2 className="mb-8 text-center text-4xl font-extrabold tracking-tight text-black sm:text-5xl">
+      <h2 className="mb-8 text-center text-4xl font-extrabold tracking-tight text-foreground sm:text-5xl">
         How it works
       </h2>
       <div className="grid gap-8 md:grid-cols-3">
@@ -41,13 +41,13 @@ export function HowItWorks() {
             rotate={i === 0 ? -1 : i === 2 ? 1 : 0}
             padding="lg"
           >
-            <span className="absolute top-4 left-5 text-6xl font-extrabold text-black/15">{step.n}</span>
-            <span className="absolute top-4 right-4 flex size-10 items-center justify-center rounded-full border-[3px] border-black bg-cream text-lg shadow-[4px_4px_0_#000]">
+            <span className="absolute top-4 left-5 text-6xl font-extrabold text-on-accent/15">{step.n}</span>
+            <span className="absolute top-4 right-4 flex size-10 items-center justify-center rounded-full border-[3px] border-border bg-card text-lg text-foreground shadow-[4px_4px_0_#000]">
               {step.icon}
             </span>
             <div className="relative mt-10">
-              <h3 className="text-xl font-extrabold text-black">{step.title}</h3>
-              <p className="mt-2 text-sm text-neutral-700">{step.body}</p>
+              <h3 className="text-xl font-extrabold text-on-accent">{step.title}</h3>
+              <p className="mt-2 text-sm text-on-accent/80">{step.body}</p>
             </div>
             <Badge color="cream" float="bl">
               {step.tag}

@@ -7,6 +7,22 @@ export const FEATURED_CATEGORY_SLUGS = [
   "tech",
   "fashion",
   "lifestyle",
+  "comedy",
+  "other",
+] as const;
+
+export const ARENA_CATEGORY_TABS = [
+  { label: "All", slug: "all", emoji: "🔥" },
+  { label: "Memes", slug: "memes", emoji: "😂" },
+  { label: "Videos", slug: "videos", emoji: "🎬" },
+  { label: "Music", slug: "music", emoji: "🎵" },
+  { label: "Art", slug: "art", emoji: "🎨" },
+  { label: "Gaming", slug: "gaming", emoji: "🎮" },
+  { label: "Tech", slug: "tech", emoji: "💻" },
+  { label: "Fashion", slug: "fashion", emoji: "👗" },
+  { label: "Lifestyle", slug: "lifestyle", emoji: "📸" },
+  { label: "Comedy", slug: "comedy", emoji: "🎭" },
+  { label: "Other", slug: "other", emoji: "✨" },
 ] as const;
 
 export const CREATOR_CATEGORY_OPTIONS = [
@@ -18,6 +34,8 @@ export const CREATOR_CATEGORY_OPTIONS = [
   { name: "Tech", slug: "tech" },
   { name: "Fashion", slug: "fashion" },
   { name: "Lifestyle", slug: "lifestyle" },
+  { name: "Comedy", slug: "comedy" },
+  { name: "Other", slug: "other" },
 ] as const;
 
 export type CreatorCategorySlug = (typeof CREATOR_CATEGORY_OPTIONS)[number]["slug"];
@@ -47,6 +65,8 @@ export const FLAVOR_CATEGORIES = [
   { label: "Tech", emoji: "💻", slug: "tech", aliases: ["technology"], color: "bg-coral", rotate: 1 },
   { label: "Fashion", emoji: "👗", slug: "fashion", aliases: [], color: "bg-bubblegum", rotate: -1 },
   { label: "Lifestyle", emoji: "📸", slug: "lifestyle", aliases: [], color: "bg-sky", rotate: 1 },
+  { label: "Comedy", emoji: "🎭", slug: "comedy", aliases: [], color: "bg-lavender", rotate: -1 },
+  { label: "Other", emoji: "✨", slug: "other", aliases: [], color: "bg-coral", rotate: 1 },
   {
     label: "Everything Viral",
     emoji: "🔥",

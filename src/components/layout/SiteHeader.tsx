@@ -1,58 +1,74 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { BoldButton } from "@/components/system";
 import { BrandLogo } from "@/components/layout/BrandLogo";
+import { HeaderSearch } from "@/components/layout/HeaderSearch";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 
 const links = [
-  { href: "/", label: "Home" },
   { href: "/explore", label: "Explore" },
   { href: "/rankings", label: "Rankings" },
-  { href: "/battles", label: "Battles" },
-  { href: "/creators", label: "Creators" },
   { href: "/about", label: "About" },
+  { href: "/rules", label: "Rules" },
 ];
 
-export function SiteHeader({ signedIn }: { signedIn: boolean }) {
+export function SiteHeader({ visitorsToday = 0 }: { visitorsToday?: number }) {
   const [open, setOpen] = useState(false);
+  const [visitors, setVisitors] = useState(visitorsToday);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/visitors")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json: { visitorsToday?: number } | null) => {
+        if (!cancelled && typeof json?.visitorsToday === "number") {
+          setVisitors(json.visitorsToday);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
-    <header className="sticky top-0 z-40 border-b-[4px] border-black bg-cream">
+    <header className="sticky top-0 z-40 border-b-[4px] border-border bg-background">
       <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 lg:gap-4 lg:px-6">
-        <BrandLogo className="pr-4 sm:pr-6" />
-        <nav className="hidden items-center gap-8 lg:flex" aria-label="Primary">
+        <BrandLogo className="pr-2 sm:pr-4" />
+        <Link
+          href="/stats"
+          className="hidden items-center gap-2 text-xs font-bold text-foreground sm:flex"
+          data-analytics="header_live_stats"
+        >
+          <span className="relative flex size-2">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-lime" />
+            <span className="relative inline-flex size-2 rounded-full bg-lime" />
+          </span>
+          <span>
+            {visitors} visitors today · stats →
+          </span>
+        </Link>
+        <nav className="hidden items-center gap-6 lg:flex" aria-label="Primary">
           {links.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="text-sm font-bold text-black hover:underline"
-            >
+            <Link key={link.href} href={link.href} className="text-sm font-bold text-foreground hover:underline">
               {link.label}
             </Link>
           ))}
         </nav>
-        <div className="ml-auto hidden items-center gap-8 lg:flex">
-          {signedIn ? (
-            <Link href="/dashboard" className="text-sm font-bold text-black hover:underline">
-              Dashboard
-            </Link>
-          ) : (
-            <Link href="/signup" className="text-sm font-bold text-black hover:underline">
-              Sign Up
-            </Link>
-          )}
-          <BoldButton
-            href={signedIn ? "/submit" : "/login?redirect=/submit"}
-            color="yellow"
-            className="rounded-full px-5"
-          >
-            Submit & Go Viral
+        <div className="ml-auto hidden items-center gap-3 lg:flex">
+          <HeaderSearch />
+          <ThemeToggle />
+          <BoldButton href="/submit" color="pink" className="rounded-full px-5">
+            Claim rank
           </BoldButton>
         </div>
-        <div className="ml-auto lg:hidden">
+        <div className="ml-auto flex items-center gap-2 lg:hidden">
+          <HeaderSearch />
+          <ThemeToggle />
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger render={<Button variant="outline" size="icon" aria-label="Open menu" />}>
               <svg
@@ -67,7 +83,7 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
               </svg>
             </SheetTrigger>
-            <SheetContent side="right" className="w-full border-l-[4px] border-black bg-cream p-6">
+            <SheetContent side="right" className="w-full border-l-[4px] border-border bg-background p-6">
               <SheetHeader>
                 <SheetTitle className="text-left text-2xl font-extrabold">Menu</SheetTitle>
               </SheetHeader>
@@ -76,28 +92,17 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="text-lg font-bold text-black"
+                    className="text-lg font-bold text-foreground"
                     onClick={() => setOpen(false)}
                   >
                     {link.label}
                   </Link>
                 ))}
-                {!signedIn ? (
-                  <Link href="/signup" className="text-lg font-bold text-black" onClick={() => setOpen(false)}>
-                    Sign Up
-                  </Link>
-                ) : (
-                  <Link href="/dashboard" className="text-lg font-bold text-black" onClick={() => setOpen(false)}>
-                    Dashboard
-                  </Link>
-                )}
-                <BoldButton
-                  href={signedIn ? "/submit" : "/login?redirect=/submit"}
-                  color="yellow"
-                  fullWidth
-                  className="rounded-full"
-                >
-                  Submit & Go Viral
+                <Link href="/stats" className="text-lg font-bold text-foreground" onClick={() => setOpen(false)}>
+                  Stats
+                </Link>
+                <BoldButton href="/submit" color="pink" fullWidth className="rounded-full">
+                  Claim rank
                 </BoldButton>
               </nav>
             </SheetContent>

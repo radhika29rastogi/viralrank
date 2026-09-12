@@ -74,7 +74,7 @@ export function HomeAnalytics({ stats }: { stats: LiveStats }) {
         <DisplayHeadline as="h2" align="center" size="md" className="mt-4" accent="Analytics">
           Live Analytics
         </DisplayHeadline>
-        <p className="mt-3 text-neutral-500">
+        <p className="mt-3 text-muted-foreground">
           Real platform numbers only. Unavailable metrics stay as Coming soon.
         </p>
       </div>
@@ -84,13 +84,13 @@ export function HomeAnalytics({ stats }: { stats: LiveStats }) {
           return (
             <ColorBlock key={metric.label} color={metric.color} padding="md">
               <div className="flex items-start justify-between gap-3">
-                <p className="text-xs font-extrabold uppercase tracking-wide text-black/70">
+                <p className="text-xs font-extrabold uppercase tracking-wide text-on-accent/70">
                   {metric.label}
                 </p>
-                <Icon className="size-5 text-black" />
+                <Icon className="size-5 text-on-accent" />
               </div>
-              <p className="mt-3 text-3xl font-extrabold text-black">{metric.value}</p>
-              <p className="mt-1 text-xs font-semibold text-black/70">{metric.hint}</p>
+              <p className="mt-3 text-3xl font-extrabold text-on-accent">{metric.value}</p>
+              <p className="mt-1 text-xs font-semibold text-on-accent/70">{metric.hint}</p>
             </ColorBlock>
           );
         })}

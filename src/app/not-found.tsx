@@ -8,7 +8,7 @@ export default function NotFound() {
         <DisplayHeadline as="h1" size="md" align="center">
           Not found
         </DisplayHeadline>
-        <p className="mt-3 font-bold text-neutral-500">No creators here yet. Be the first. 🔥</p>
+        <p className="mt-3 font-bold text-muted-foreground">No creators here yet. Be the first. 🔥</p>
         <div className="mt-6 flex justify-center">
           <BoldButton href="/submit" color="yellow">
             Rank a Creator

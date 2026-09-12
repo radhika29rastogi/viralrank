@@ -1,35 +1,32 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { SubmitForm } from "@/components/creator/SubmitForm";
+import { Suspense } from "react";
+import { ArenaSubmitForm } from "@/components/creator/ArenaSubmitForm";
 import { BrandLogo } from "@/components/layout/BrandLogo";
 import { DisplayHeadline } from "@/components/system";
-import { getCurrentUser } from "@/lib/queries";
 
 export const metadata: Metadata = {
-  title: "Rank a Creator",
-  description: "Add an Instagram creator and pay ₹199 to publish on the ViralRank leaderboard.",
+  title: "Submit a creator",
+  description: "Paste an Instagram handle, preview the profile, then hype or bid — no account required.",
 };
 
-export default async function SubmitPage() {
-  const { user } = await getCurrentUser();
-  if (!user) {
-    redirect("/login?redirect=/submit");
-  }
-
+export default function SubmitPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-8 px-4 py-12">
       <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
         <BrandLogo href="/" size="lg" className="justify-center sm:justify-start" />
         <div>
-          <DisplayHeadline size="md" accent="Rank">
-            Rank a Creator
+          <DisplayHeadline size="md" accent="Submit">
+            Submit. Hype. Rank.
           </DisplayHeadline>
-          <p className="mt-2 text-neutral-500">
-            Submit a creator, pay ₹199 to publish, then supporters can bid to rank them.
+          <p className="mt-2 text-muted-foreground">
+            Paste an Instagram URL. We fetch the real profile. New listings claim rank from ₹199.
+            Hype (₹49+) is only for creators already on the ranking. No signup.
           </p>
         </div>
       </div>
-      <SubmitForm />
+      <Suspense fallback={<p className="font-bold">Loading submit…</p>}>
+        <ArenaSubmitForm />
+      </Suspense>
     </div>
   );
 }

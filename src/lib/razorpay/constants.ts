@@ -1,0 +1,2 @@
+export const MIN_STANDARD_ORDER_PAISE = 100;
+export const MAX_STANDARD_ORDER_PAISE = 10_000_000;

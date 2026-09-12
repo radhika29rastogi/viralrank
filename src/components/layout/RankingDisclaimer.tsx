@@ -4,7 +4,7 @@ import { RANKING_INDEPENDENCE_DISCLAIMER } from "@/lib/copy/platform";
 export function RankingDisclaimer() {
   return (
     <ColorBlock color="cream" padding="md">
-      <p className="text-sm font-medium text-neutral-600">{RANKING_INDEPENDENCE_DISCLAIMER}</p>
+      <p className="text-sm font-medium text-muted-foreground">{RANKING_INDEPENDENCE_DISCLAIMER}</p>
     </ColorBlock>
   );
 }

@@ -14,16 +14,17 @@ export default function AboutPage() {
         About ViralRank
       </DisplayHeadline>
       <ColorBlock color="cream" padding="lg">
-        <p className="text-neutral-600">
-          ViralRank is a creator discovery + paid ranking + hype platform. Anyone can add an Instagram
-          creator. Rank is only the highest verified ranking bid. Hype is separate community support
-          and never moves the leaderboard.
+        <p className="text-muted-foreground">
+          ViralRank is a paid creator ranking arena. Paste an Instagram handle — no signup — and we
+          fetch the display name, photo, and follower count from a third-party Instagram data API.
+          Rank is the highest verified rank bid. Hype is separate community support and never moves
+          the leaderboard.
         </p>
       </ColorBlock>
       <Disclaimer />
-      <p className="text-neutral-500">
-        Instagram stats are optional and entered by the person who submits the creator. We do not
-        invent follower counts or fetch Instagram profiles automatically.
+      <p className="text-muted-foreground">
+        If we cannot fetch the Instagram profile, we will not let you submit empty or invented stats.
+        After payment, a magic manage link is emailed with the receipt — there is no account area.
       </p>
     </div>
   );

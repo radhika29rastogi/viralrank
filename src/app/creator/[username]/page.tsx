@@ -59,9 +59,9 @@ export default async function CreatorPage({ params }: Props) {
             <DisplayHeadline as="h1" size="md">
               {creator.name}
             </DisplayHeadline>
-            <p className="mt-2 text-neutral-500">@{creator.instagram_username} · {creator.location}</p>
-            {creator.bio ? <p className="mt-3 max-w-xl text-neutral-600">{creator.bio}</p> : null}
-            <p className="mt-3 text-sm text-neutral-500">
+            <p className="mt-2 text-muted-foreground">@{creator.instagram_username} · {creator.location}</p>
+            {creator.bio ? <p className="mt-3 max-w-xl text-muted-foreground">{creator.bio}</p> : null}
+            <p className="mt-3 text-sm text-muted-foreground">
               Followers {formatNumber(creator.followers)} · Avg views {formatNumber(creator.average_views)}
             </p>
             <div className="mt-3">
@@ -69,7 +69,7 @@ export default async function CreatorPage({ params }: Props) {
             </div>
             <a
               href={`/api/creators/${creator.id}/instagram`}
-              className="mt-4 inline-block text-sm font-bold text-black underline"
+              className="mt-4 inline-block text-sm font-bold text-foreground underline"
             >
               View Instagram →
             </a>
@@ -97,9 +97,9 @@ export default async function CreatorPage({ params }: Props) {
       </div>
 
       <ColorBlock color="cream" padding="md">
-        <p className="text-sm font-extrabold uppercase text-black">Total engagement</p>
+        <p className="text-sm font-extrabold uppercase text-foreground">Total engagement</p>
         <p className="mt-1 text-2xl font-extrabold">{formatCompactCount(totalEngagement(creator))}</p>
-        <p className="mt-2 text-sm text-neutral-600">
+        <p className="mt-2 text-sm text-muted-foreground">
           Rank is calculated server-side from hype and engagement. Ranking bid:{" "}
           <CountUp value={bid} /> · Beat ₹{beat.toLocaleString("en-IN")} to raise bid rank weight.
         </p>
@@ -109,6 +109,7 @@ export default async function CreatorPage({ params }: Props) {
         <HypeButton
           creatorId={creator.id}
           creatorName={creator.name}
+          instagramUsername={creator.instagram_username}
           currentHighestBid={bid}
           initialCount={creator.hype_count}
         />

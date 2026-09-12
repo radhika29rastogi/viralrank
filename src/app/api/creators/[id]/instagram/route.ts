@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { clickCookieName, hasRecentClickCookie, incrementCreatorClick } from "@/lib/arena/clicks";
 import { isPublicCreator } from "@/lib/creators/public";
 import { isAllowedInstagramUrl } from "@/lib/security";
 import { clientKey, rateLimit } from "@/lib/rate-limit";
@@ -35,7 +36,16 @@ export async function GET(request: Request, { params }: Params) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  await admin.rpc("increment_instagram_clicks", { p_creator_id: creatorId });
-
-  return NextResponse.redirect(creator.instagram_url);
+  const already = hasRecentClickCookie(request, creatorId);
+  const result = await incrementCreatorClick(admin, creatorId, already);
+  const res = NextResponse.redirect(creator.instagram_url);
+  if (result.counted && result.maxAge) {
+    res.cookies.set(clickCookieName(creatorId), "1", {
+      httpOnly: true,
+      sameSite: "lax",
+      maxAge: result.maxAge,
+      path: "/",
+    });
+  }
+  return res;
 }

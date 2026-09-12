@@ -21,9 +21,8 @@ const classes = ({
   className,
 }: Pick<BoldButtonProps, "color" | "size" | "fullWidth" | "className">) =>
   cn(
-    "inline-flex items-center justify-center gap-2 rounded-xl border-[3px] border-black font-extrabold text-black shadow-[4px_4px_0_#000] transition-[transform,box-shadow] active:translate-y-0.5 active:shadow-none disabled:pointer-events-none disabled:opacity-50",
+    "inline-flex items-center justify-center gap-2 rounded-xl border-[3px] border-border font-extrabold text-on-accent shadow-[4px_4px_0_#000] transition-[transform,box-shadow] active:translate-y-0.5 active:shadow-none disabled:pointer-events-none disabled:opacity-50",
     color === "yellow" ? "bg-lemon" : "bg-hot-pink",
-    color === "pink" && "text-black",
     size === "lg" ? "h-14 px-6 text-base" : "h-11 px-4 text-sm",
     fullWidth && "w-full",
     className,

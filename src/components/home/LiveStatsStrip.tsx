@@ -77,7 +77,7 @@ export function LiveStatsStrip({ initial }: { initial: LiveStats }) {
 
   return (
     <div className="border-b-[4px] border-black bg-cream px-4 py-2">
-      <p className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-xs font-extrabold text-black sm:text-sm">
+      <p className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-xs font-extrabold text-foreground sm:text-sm">
         <span>🔥 {formatNumber(creators)} creators ranked</span>
         <span aria-hidden>·</span>
         <span>⚡ {formatCompactInr(moved)} moved this week</span>

@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-export const dynamic = "force-dynamic";
 import { CreatorCard } from "@/components/creator/CreatorCard";
 import { ThroneCard } from "@/components/creator/ThroneCard";
 import { ListingFilters } from "@/components/creator/ListingFilters";
 import { Disclaimer } from "@/components/layout/Disclaimer";
 import { ColorBlock, DisplayHeadline } from "@/components/system";
-import { getCategories, getCreators } from "@/lib/queries";
+import { cachedCategories, cachedCreators, cachedRankedCreators } from "@/lib/listing-cache";
+
+export const revalidate = 30;
 
 export const metadata: Metadata = {
   title: "Rankings",
@@ -17,22 +18,28 @@ export const metadata: Metadata = {
 export default async function RankingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ category?: string; sort?: string; page?: string; q?: string }>;
+  searchParams: Promise<{ category?: string; sort?: string; page?: string; q?: string; range?: string }>;
 }) {
   const sp = await searchParams;
   const sort = (sp.sort as "bid" | "hype" | "clicks" | "followers" | "newest") || "bid";
+  const range = sp.range === "today" ? "today" : "all";
   const page = Math.max(1, Number(sp.page || 1));
   const limit = 12;
-  const [{ items, total }, categoryResult] = await Promise.all([
-    getCreators({
+  const [listed, todayRanked, categoryResult] = await Promise.all([
+    cachedCreators({
       search: sp.q,
       category: sp.category,
       sort,
       limit,
       offset: (page - 1) * limit,
     }),
-    getCategories(),
+    range === "today"
+      ? cachedRankedCreators({ category: sp.category, range: "today", limit })
+      : Promise.resolve(null),
+    cachedCategories(),
   ]);
+  const items = todayRanked ? todayRanked.items : listed.items;
+  const total = todayRanked ? todayRanked.items.length : listed.total;
   const categories = categoryResult.items;
   const throne = sort === "bid" && page === 1 ? items[0] : null;
   const grid = throne ? items.slice(1) : items;
@@ -41,13 +48,13 @@ export default async function RankingsPage({
   return (
     <div className="mx-auto max-w-6xl space-y-8 px-4 py-12">
       <DisplayHeadline size="md" accent="Rankings">
-        The Rankings
+        {range === "today" ? "Today's rankings" : "The Rankings"}
       </DisplayHeadline>
       <Disclaimer />
       <ListingFilters categories={categories} />
       {!items.length ? (
         <ColorBlock color="cream" className="py-16 text-center">
-          <p className="font-extrabold text-black">No creators here yet. Be the first. 🔥</p>
+          <p className="font-extrabold text-foreground">No creators here yet. Be the first. 🔥</p>
         </ColorBlock>
       ) : (
         <>
@@ -60,7 +67,7 @@ export default async function RankingsPage({
         </>
       )}
       {pages > 1 ? (
-        <div className="flex justify-center gap-4 text-sm font-bold text-black">
+        <div className="flex justify-center gap-4 text-sm font-bold text-foreground">
           {page > 1 ? (
             <Link
               className="underline"
@@ -74,7 +81,7 @@ export default async function RankingsPage({
               Previous
             </Link>
           ) : null}
-          <span className="text-neutral-500">Page {page} / {pages}</span>
+          <span className="text-muted-foreground">Page {page} / {pages}</span>
           {page < pages ? (
             <Link
               className="underline"

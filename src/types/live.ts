@@ -6,6 +6,7 @@ export type LiveStats = {
   profileViews: number;
   totalHype: number;
   visitors: number | null;
+  visitorsToday?: number;
 };
 
 export type ArenaEvent = {

@@ -26,21 +26,27 @@ export function ListingFilters({
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (initialCategories.length > 0) {
+      setCategories(initialCategories);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     async function load() {
-      if (initialCategories.length === 0) setLoading(true);
+      setLoading(true);
       try {
         const res = await fetch("/api/categories");
         const json = (await res.json()) as { categories?: Category[]; error?: string };
         if (cancelled) return;
         if (!res.ok) {
           setError(json.error ?? "Could not load categories from the database.");
-          if (!initialCategories.length) setCategories([]);
+          setCategories([]);
           return;
         }
         const items = (json.categories ?? []).filter((c) => c?.id && c.slug && c.name);
         setCategories(items);
-        setError(items.length ? "" : "");
+        setError("");
       } catch {
         if (!cancelled) {
           setError("Could not load categories. Check your connection and try again.");
@@ -53,7 +59,7 @@ export function ListingFilters({
     return () => {
       cancelled = true;
     };
-  }, [initialCategories.length]);
+  }, [initialCategories]);
 
   function update(next: Record<string, string>) {
     const sp = new URLSearchParams(params.toString());
@@ -79,11 +85,11 @@ export function ListingFilters({
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search username, name, location"
-          className="h-11 flex-1 rounded-xl border-[3px] border-black bg-cream px-3 text-sm font-medium"
+          className="h-11 flex-1 rounded-xl border-[3px] border-border bg-input-bg px-3 text-sm font-medium text-input-text"
           aria-label="Search creators"
         />
         <select
-          className="h-11 rounded-xl border-[3px] border-black bg-cream px-3 text-sm font-bold"
+          className="h-11 rounded-xl border-[3px] border-border bg-input-bg px-3 text-sm font-bold text-input-text"
           value={params.get("category") ?? "all"}
           onChange={(e) => update({ category: e.target.value })}
           aria-label="Filter by category"
@@ -97,7 +103,7 @@ export function ListingFilters({
           ))}
         </select>
         <select
-          className="h-11 rounded-xl border-[3px] border-black bg-cream px-3 text-sm font-bold"
+          className="h-11 rounded-xl border-[3px] border-border bg-input-bg px-3 text-sm font-bold text-input-text"
           value={params.get("sort") ?? "bid"}
           onChange={(e) => update({ sort: e.target.value })}
           aria-label="Sort creators"
@@ -112,14 +118,14 @@ export function ListingFilters({
           Search
         </BoldButton>
       </form>
-      {loading ? <p className="mt-2 text-xs font-bold text-neutral-500">Loading categories…</p> : null}
+      {loading ? <p className="mt-2 text-xs font-bold text-muted-foreground">Loading categories…</p> : null}
       {!loading && error ? (
         <p className="mt-2 text-xs font-bold text-rose-700" role="alert">
           {error}
         </p>
       ) : null}
       {!loading && !error && categories.length === 0 ? (
-        <p className="mt-2 text-xs font-bold text-neutral-500">No categories available.</p>
+        <p className="mt-2 text-xs font-bold text-muted-foreground">No categories available.</p>
       ) : null}
     </ColorBlock>
   );

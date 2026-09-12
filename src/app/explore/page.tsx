@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { CreatorCard } from "@/components/creator/CreatorCard";
 import { ListingFilters } from "@/components/creator/ListingFilters";
 import { ColorBlock, DisplayHeadline } from "@/components/system";
-import { getCategories, getCreators } from "@/lib/queries";
+import { cachedCategories, cachedCreators } from "@/lib/listing-cache";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 30;
 
 export const metadata: Metadata = {
   title: "Explore",
@@ -18,13 +18,13 @@ export default async function ExplorePage({
 }) {
   const sp = await searchParams;
   const [{ items }, categoryResult] = await Promise.all([
-    getCreators({
+    cachedCreators({
       search: sp.q,
       category: sp.category,
       sort: (sp.sort as "bid" | "hype" | "clicks" | "followers" | "newest") || "bid",
       limit: 24,
     }),
-    getCategories(),
+    cachedCategories(),
   ]);
   const categories = categoryResult.items;
 
@@ -36,7 +36,7 @@ export default async function ExplorePage({
       <ListingFilters categories={categories} />
       {!items.length ? (
         <ColorBlock color="cream" className="py-16 text-center">
-          <p className="font-extrabold text-black">No creators here yet. Be the first. 🔥</p>
+          <p className="font-extrabold text-foreground">No creators here yet. Be the first. 🔥</p>
         </ColorBlock>
       ) : (
         <div className="grid gap-8 sm:grid-cols-2 xl:grid-cols-3">

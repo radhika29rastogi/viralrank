@@ -19,7 +19,7 @@ export function ClosingCta() {
         <DisplayHeadline as="h2" align="center" invert size="md">
           Ready to take #1? 🔥
         </DisplayHeadline>
-        <p className="mx-auto mt-4 max-w-lg text-cream/90">
+        <p className="mx-auto mt-4 max-w-lg text-on-accent/80">
           Creators compete for attention. You decide who gets the hype.
         </p>
         <div className="mt-8 flex justify-center">

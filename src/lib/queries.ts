@@ -4,6 +4,8 @@ import { PUBLIC_CREATOR_STATUS, PUBLIC_LISTING_PAYMENT_STATUS } from "@/lib/crea
 import { ensureCategoriesSeeded } from "@/lib/supabase/seed-categories";
 import type { Battle, Category, Creator, Hype, RankingBid } from "@/types/database";
 
+export type RankedCreator = Creator & { rankAmount: number };
+
 /**
  * Public listing columns that exist on production without 0006.
  * Do not select `*` (PostgREST schema cache can include missing `instagram_clicks`).
@@ -22,8 +24,10 @@ const creatorSelect = `
   average_views,
   instagram_data_source,
   current_highest_bid,
+  current_rank_bid,
   current_rank,
   rank_set_at,
+  stats_fetched_at,
   profile_clicks,
   hype_count,
   total_hype_amount,
@@ -311,6 +315,7 @@ export async function getLiveStats() {
     profileViews: 0,
     totalHype: 0,
     visitors: null as number | null,
+    visitorsToday: 0,
   };
   const supabase = await getListingClient();
   if (!supabase) return empty;
@@ -321,12 +326,12 @@ export async function getLiveStats() {
     supabase.from("creators").select("id", { count: "exact", head: true }),
   );
   const creatorsQuery = publicCreatorFilters(
-    supabase.from("creators").select("profile_clicks, hype_count, current_rank"),
+    supabase.from("creators").select("id", { count: "exact", head: true }).not("current_rank", "is", null),
   );
 
   const [
     { count, error: countError },
-    { data: creators, error: creatorsError },
+    { count: rankedCountRaw, error: creatorsError },
     { data: bids, error: bidsError },
     { data: hypes, error: hypesError },
   ] = await Promise.all([
@@ -349,17 +354,15 @@ export async function getLiveStats() {
   logQueryError("getLiveStats.hypes", hypesError);
 
   const movedThisWeek =
-    (bids ?? []).reduce((sum, row) => sum + Number(row.amount || 0), 0) +
-    (hypes ?? []).reduce((sum, row) => sum + Number(row.amount || 0), 0);
-  const rows = (creators ?? []) as Array<{
-    profile_clicks?: number | null;
-    hype_count?: number | null;
-    current_rank?: number | null;
-  }>;
-  const profileViews = rows.reduce((sum, row) => sum + Number(row.profile_clicks || 0), 0);
-  const totalHype = rows.reduce((sum, row) => sum + Number(row.hype_count || 0), 0);
-  const rankedCount = rows.filter((row) => row.current_rank != null && row.current_rank > 0).length;
+    (bids ?? []).reduce((sum: number, row: { amount?: number | null }) => sum + Number(row.amount || 0), 0) +
+    (hypes ?? []).reduce((sum: number, row: { amount?: number | null }) => sum + Number(row.amount || 0), 0);
+  const rankedCount = rankedCountRaw ?? 0;
   const creatorCount = count ?? 0;
+  const profileViews = 0;
+  const totalHype = 0;
+  const admin = createAdminClient();
+  const { countVisitorsToday } = await import("@/lib/arena/visits");
+  const visitorsToday = admin ? await countVisitorsToday(admin) : 0;
 
   return {
     creatorsRanked: creatorCount,
@@ -368,8 +371,104 @@ export async function getLiveStats() {
     movedThisWeek,
     profileViews,
     totalHype,
-    visitors: null,
+    visitors: visitorsToday,
+    visitorsToday,
   };
+}
+
+export async function getRankedCreators(options: {
+  category?: string;
+  range?: "all" | "today";
+  limit?: number;
+}) {
+  const { getCategoryTopBid, getVerifiedRankBids } = await import("@/lib/arena/bids");
+  const { startOfTodayIst } = await import("@/lib/arena/time");
+  const supabase = await getListingClient();
+  const admin = createAdminClient() ?? supabase;
+  if (!supabase || !admin) return { items: [] as RankedCreator[], claimPrice: 199, categoryId: null as string | null };
+
+  let categoryId: string | null = null;
+  if (options.category && options.category !== "all") {
+    const { data: cat } = await supabase
+      .from("categories")
+      .select("id")
+      .eq("slug", options.category)
+      .maybeSingle();
+    categoryId = cat?.id ?? null;
+    if (options.category && !categoryId) {
+      return { items: [] as RankedCreator[], claimPrice: 199, categoryId: null };
+    }
+  }
+
+  const since = options.range === "today" ? startOfTodayIst().toISOString() : undefined;
+  const bids = await getVerifiedRankBids(admin, { since });
+  const { items } = await getCreators({
+    category: options.category,
+    sort: "bid",
+    limit: options.limit ?? 40,
+  });
+
+  const ranked = items
+    .map((creator) => {
+      const amount =
+        options.range === "today"
+          ? bids.get(creator.id) ?? 0
+          : Math.max(
+              bids.get(creator.id) ?? 0,
+              Number(creator.current_rank_bid || creator.current_highest_bid || 0),
+            );
+      return { ...creator, rankAmount: amount };
+    })
+    .filter((creator) => creator.rankAmount > 0)
+    .sort((a, b) => b.rankAmount - a.rankAmount);
+
+  const top = await getCategoryTopBid(admin, {
+    categoryId,
+    range: options.range,
+  });
+  const claimPrice = top > 0 ? top + 100 : 199;
+  return { items: ranked, claimPrice, categoryId };
+}
+
+export async function getPublicStats() {
+  const admin = createAdminClient();
+  const { countVisitorsToday, countVerifiedPayments } = await import("@/lib/arena/visits");
+  const empty = { visitorsToday: 0, creatorCount: 0, paymentCount: 0 };
+  if (!admin) return empty;
+  const [{ count }, visitorsToday, paymentCount] = await Promise.all([
+    publicCreatorFilters(admin.from("creators").select("id", { count: "exact", head: true })),
+    countVisitorsToday(admin),
+    countVerifiedPayments(admin),
+  ]);
+  return {
+    visitorsToday,
+    creatorCount: count ?? 0,
+    paymentCount,
+  };
+}
+
+export async function getCreatorByEditToken(token: string) {
+  const admin = createAdminClient();
+  if (!admin || !token) return null;
+  const { data: byCreator } = await admin
+    .from("creators")
+    .select(creatorSelect)
+    .eq("edit_token", token)
+    .maybeSingle();
+  if (byCreator) {
+    const [withCategory] = await attachCategories(admin, asCreators([byCreator as Creator]));
+    return withCategory ?? null;
+  }
+  const { data: payment } = await admin
+    .from("payments")
+    .select("creator_id")
+    .eq("edit_token", token)
+    .maybeSingle();
+  if (!payment?.creator_id) return null;
+  const { data } = await admin.from("creators").select(creatorSelect).eq("id", payment.creator_id).maybeSingle();
+  if (!data) return null;
+  const [withCategory] = await attachCategories(admin, asCreators([data as Creator]));
+  return withCategory ?? null;
 }
 
 export async function getLiveBattle(): Promise<Battle | null> {

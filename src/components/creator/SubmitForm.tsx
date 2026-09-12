@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BoldButton, ColorBlock } from "@/components/system";
+import { SmartImage } from "@/components/media/SmartImage";
 import { CategorySelect } from "@/components/creator/CategorySelect";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -285,14 +286,14 @@ export function SubmitForm() {
       const res = await fetch("/api/creators/upload-image", { method: "POST", body });
       const json = (await res.json()) as { ok?: boolean; url?: string; error?: string };
       if (!res.ok || !json.url) {
-        setError(json.error ?? "Could not upload image.");
+        setError(json.error ?? "Image upload failed. Please try again.");
         return null;
       }
       setUploadedImageUrl(json.url);
       setForm((prev) => ({ ...prev, profileImageUrl: json.url ?? "" }));
       return json.url;
     } catch {
-      setError("Could not upload image.");
+      setError("Image upload failed. Please try again.");
       return null;
     } finally {
       setImageUploading(false);
@@ -475,12 +476,12 @@ export function SubmitForm() {
       <form onSubmit={submit} className="grid gap-4 overflow-visible">
         {paymentUi === "success" ? (
           <ColorBlock color="lime" padding="md">
-            <p className="text-sm font-bold text-black">Payment successful — publishing creator...</p>
+            <p className="text-sm font-bold text-on-accent">Payment successful — publishing creator...</p>
           </ColorBlock>
         ) : null}
         {paymentUi === "cancelled" ? (
           <ColorBlock color="yellow" padding="md">
-            <p className="text-sm font-bold text-black">
+            <p className="text-sm font-bold text-on-accent">
               Payment cancelled. This creator is saved but hidden until you pay ₹{MIN_LISTING_PAYMENT}.
             </p>
           </ColorBlock>
@@ -559,15 +560,15 @@ export function SubmitForm() {
               onChange={(e) => onImageSelected(e.target.files?.[0] ?? null)}
             />
             {imagePreview ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <SmartImage
                 src={imagePreview}
                 alt="Preview"
-                className="mt-2 size-24 rounded-2xl border-[3px] border-black object-cover"
+                size="lg"
+                className="mt-2 size-24 rounded-2xl border-[3px] border-border"
               />
             ) : null}
             {imageUploading ? (
-              <p className="mt-1 text-xs font-bold text-neutral-500">Uploading image...</p>
+              <p className="mt-1 text-xs font-bold text-muted-foreground">Uploading image...</p>
             ) : null}
           </div>
           <Field
@@ -590,7 +591,7 @@ export function SubmitForm() {
           <Textarea id="bio" value={form.bio} onChange={(e) => setForm((prev) => ({ ...prev, bio: e.target.value }))} />
         </div>
         <ColorBlock color="yellow" padding="md" className="space-y-3">
-          <p className="text-sm font-extrabold text-black">Listing fee: ₹{MIN_LISTING_PAYMENT}</p>
+          <p className="text-sm font-extrabold text-on-accent">Listing fee: ₹{MIN_LISTING_PAYMENT}</p>
           <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
             <div>
               <Label htmlFor="coupon">Coupon</Label>
@@ -613,16 +614,16 @@ export function SubmitForm() {
             </div>
           </div>
           {couponState.status === "valid" ? (
-            <div className="text-sm font-bold text-black">
+            <div className="text-sm font-bold text-on-accent">
               <p>₹{MIN_LISTING_PAYMENT}</p>
               <p>- ₹{couponState.discountInr} discount</p>
-              <p className="mt-1 border-t border-black/20 pt-1">You pay ₹{couponState.finalAmountInr}</p>
-              <p className="mt-1 text-xs text-neutral-600">{couponState.message}</p>
+              <p className="mt-1 border-t border-border/20 pt-1">You pay ₹{couponState.finalAmountInr}</p>
+              <p className="mt-1 text-xs text-on-accent/80">{couponState.message}</p>
             </div>
           ) : couponState.status === "invalid" ? (
             <p className="text-sm font-bold text-rose-700">{couponState.message}</p>
           ) : (
-            <p className="text-sm font-bold text-black">You pay ₹{MIN_LISTING_PAYMENT}</p>
+            <p className="text-sm font-bold text-on-accent">You pay ₹{MIN_LISTING_PAYMENT}</p>
           )}
         </ColorBlock>
         <p className="text-xs font-bold text-muted-foreground">

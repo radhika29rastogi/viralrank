@@ -24,31 +24,31 @@ export function CreatorCard({ creator }: { creator: Creator; index?: number }) {
       <div className="mt-4 flex flex-col items-center gap-3 text-center">
         <CreatorAvatar name={creator.name} imageUrl={creator.profile_image_url} size="md" />
         <div className="min-w-0">
-          <p className="truncate text-lg font-extrabold text-black">{creator.name}</p>
-          <p className="truncate text-sm text-neutral-500">@{creator.instagram_username}</p>
+          <p className="truncate text-lg font-extrabold text-foreground">{creator.name}</p>
+          <p className="truncate text-sm text-muted-foreground">@{creator.instagram_username}</p>
         </div>
       </div>
 
       <dl className="mt-4 grid grid-cols-2 gap-2 text-center text-xs font-bold">
         <div>
-          <dt className="text-neutral-500">🔥 HYPE</dt>
-          <dd className="text-base text-black">{formatCompactCount(creator.hype_count)}</dd>
+          <dt className="text-muted-foreground">🔥 HYPE</dt>
+          <dd className="text-base text-foreground">{formatCompactCount(creator.hype_count)}</dd>
         </div>
         <div>
-          <dt className="text-neutral-500">👀 Views</dt>
-          <dd className="text-base text-black">{formatCompactCount(creator.profile_clicks)}</dd>
+          <dt className="text-muted-foreground">👀 Views</dt>
+          <dd className="text-base text-foreground">{formatCompactCount(creator.profile_clicks)}</dd>
         </div>
         <div>
-          <dt className="text-neutral-500">Instagram</dt>
-          <dd className="text-base text-black">{formatCompactCount(creator.instagram_clicks ?? 0)}</dd>
+          <dt className="text-muted-foreground">Instagram</dt>
+          <dd className="text-base text-foreground">{formatCompactCount(creator.instagram_clicks ?? 0)}</dd>
         </div>
         <div>
-          <dt className="text-neutral-500">Engagement</dt>
-          <dd className="text-base text-black">{formatCompactCount(totalEngagement(creator))}</dd>
+          <dt className="text-muted-foreground">Engagement</dt>
+          <dd className="text-base text-foreground">{formatCompactCount(totalEngagement(creator))}</dd>
         </div>
       </dl>
 
-      <p className="mt-3 text-center text-sm text-neutral-500">
+      <p className="mt-3 text-center text-sm text-muted-foreground">
         Ranking bid {formatCompactCount(bid)}
       </p>
 
@@ -56,6 +56,7 @@ export function CreatorCard({ creator }: { creator: Creator; index?: number }) {
         <HypeButton
           creatorId={creator.id}
           creatorName={creator.name}
+          instagramUsername={creator.instagram_username}
           currentHighestBid={bid}
           initialCount={creator.hype_count}
         />
@@ -67,13 +68,13 @@ export function CreatorCard({ creator }: { creator: Creator; index?: number }) {
         />
         <Link
           href={`/api/creators/${creator.id}/instagram`}
-          className="text-center text-sm font-semibold text-black underline"
+          className="text-center text-sm font-semibold text-foreground underline"
         >
           Instagram →
         </Link>
         <Link
           href={`/creator/${creator.instagram_username}`}
-          className="text-center text-sm font-semibold text-neutral-500 underline"
+          className="text-center text-sm font-semibold text-muted-foreground underline"
         >
           View profile
         </Link>

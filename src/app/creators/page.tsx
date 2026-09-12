@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { CreatorDirectoryCard } from "@/components/creator/CreatorDirectoryCard";
-
-export const dynamic = "force-dynamic";
 import { FlavorGrid } from "@/components/home/FlavorGrid";
 import { FaqSection } from "@/components/home/FaqSection";
 import { Badge, BoldButton, ColorBlock, DisplayHeadline } from "@/components/system";
-import { getCategories, getCreators } from "@/lib/queries";
+import { cachedCategories, cachedCreators } from "@/lib/listing-cache";
+
+export const revalidate = 30;
 
 export const metadata: Metadata = {
   title: "Creators",
@@ -14,8 +14,8 @@ export const metadata: Metadata = {
 
 export default async function CreatorsPage() {
   const [{ items }, categories] = await Promise.all([
-    getCreators({ sort: "bid", limit: 24 }),
-    getCategories().then((r) => r.items),
+    cachedCreators({ sort: "bid", limit: 24 }),
+    cachedCategories().then((r) => r.items),
   ]);
 
   return (
@@ -27,7 +27,7 @@ export default async function CreatorsPage() {
         <DisplayHeadline align="center" size="md" className="mt-4">
           Creators are cooking. 👀
         </DisplayHeadline>
-        <p className="mt-3 text-neutral-500">
+        <p className="mt-3 text-muted-foreground">
           Discover the people behind the internet&apos;s next viral moment.
         </p>
       </section>

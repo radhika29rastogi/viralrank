@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { ArenaBattle } from "@/components/battle/BattleCard";
-
-export const dynamic = "force-dynamic";
 import { Disclaimer } from "@/components/layout/Disclaimer";
 import { DisplayHeadline } from "@/components/system";
-import { getLiveBattle, getTopTwo } from "@/lib/queries";
+import { cachedLiveBattle, cachedTopTwo } from "@/lib/listing-cache";
+
+export const revalidate = 30;
 
 export const metadata: Metadata = {
   title: "Battles",
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 export default async function BattlesPage() {
-  const [top, live] = await Promise.all([getTopTwo(), getLiveBattle()]);
+  const [top, live] = await Promise.all([cachedTopTwo(), cachedLiveBattle()]);
   const showNewOne = Boolean(live?.winner_id && top[0] && live.winner_id === top[0].id);
 
   return (

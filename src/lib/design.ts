@@ -23,3 +23,6 @@ export const rotateClass: Record<number, string> = {
 };
 
 export const hardShadow = "shadow-[4px_4px_0_#000]";
+
+/** Razorpay Checkout theme — maps to `--color-gold`. */
+export const RAZORPAY_CHECKOUT_THEME = "#F5C518";

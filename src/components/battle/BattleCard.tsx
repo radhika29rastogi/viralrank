@@ -41,19 +41,20 @@ function Panel({ creator, tone }: { creator: Creator; tone: string }) {
         className="flex flex-1 flex-col items-center justify-center gap-2 pt-12"
       >
         <CreatorAvatar name={creator.name} imageUrl={creator.profile_image_url} size="lg" />
-        <p className="text-center text-sm font-extrabold text-black">{creator.name}</p>
+        <p className="text-center text-sm font-extrabold text-on-accent">{creator.name}</p>
       </Link>
       <div className="space-y-2 border-t-[3px] border-black bg-cream px-3 py-3">
-        <p className="flex items-center justify-center gap-2 text-lg font-extrabold text-black">
+        <p className="flex items-center justify-center gap-2 text-lg font-extrabold text-foreground">
           <FireIcon className="size-5 text-hot-pink" />
           {formatCompactCount(hype)} HYPE
         </p>
-        <p className="text-center text-xs font-semibold text-neutral-500">
+        <p className="text-center text-xs font-semibold text-muted-foreground">
           👀 {formatCompactCount(creator.profile_clicks)} views · IG {formatCompactCount(creator.instagram_clicks ?? 0)}
         </p>
         <HypeButton
           creatorId={creator.id}
           creatorName={creator.name}
+          instagramUsername={creator.instagram_username}
           currentHighestBid={Number(creator.current_highest_bid) || 0}
           initialCount={hype}
           compact
@@ -65,17 +66,17 @@ function Panel({ creator, tone }: { creator: Creator; tone: string }) {
 
 function GhostPanel({ label }: { label: string }) {
   return (
-    <div className="relative flex min-h-64 flex-col overflow-hidden rounded-2xl border-[3px] border-dashed border-black/50 bg-neutral-200/70">
-      <span className="absolute top-3 left-3 z-10 rounded-full border-[3px] border-dashed border-black/40 bg-cream px-3 py-1 text-xs font-extrabold uppercase text-neutral-400">
+    <div className="relative flex min-h-64 flex-col overflow-hidden rounded-2xl border-[3px] border-dashed border-border/50 bg-muted">
+      <span className="absolute top-3 left-3 z-10 rounded-full border-[3px] border-dashed border-border/40 bg-card px-3 py-1 text-xs font-extrabold uppercase text-muted-foreground">
         {label}
       </span>
       <div className="flex flex-1 items-center justify-center pt-10">
-        <span className="flex size-24 items-center justify-center rounded-full border-[3px] border-dashed border-black/30 bg-neutral-300 text-4xl text-neutral-400">
+        <span className="flex size-24 items-center justify-center rounded-full border-[3px] border-dashed border-border/30 bg-muted text-4xl text-muted-foreground">
           ?
         </span>
       </div>
-      <div className="border-t-[3px] border-dashed border-black/40 bg-cream/80 px-3 py-2 text-center">
-        <p className="text-sm font-extrabold text-neutral-400">Waiting for challenger</p>
+      <div className="border-t-[3px] border-dashed border-border/40 bg-card/80 px-3 py-2 text-center">
+        <p className="text-sm font-extrabold text-muted-foreground">Waiting for challenger</p>
       </div>
     </div>
   );
@@ -107,7 +108,7 @@ export function BattleCard({
         <VsBadge />
       </div>
 
-      <div className="mt-6 flex justify-center gap-8 text-sm font-semibold text-neutral-600">
+      <div className="mt-6 flex justify-center gap-8 text-sm font-semibold text-muted-foreground">
         <span className="inline-flex items-center gap-2">
           <TrophyIcon className="size-4" />
           {displayRank(one.current_rank)} · {formatCompactCount(one.hype_count)} hype
@@ -139,7 +140,7 @@ export function DefendingChampion({ creator }: { creator: Creator }) {
         <GhostPanel label="@challenger" />
         <VsBadge />
       </div>
-      <p className="wait-pulse mt-6 text-center text-sm font-extrabold uppercase text-neutral-500">
+      <p className="wait-pulse mt-6 text-center text-sm font-extrabold uppercase text-muted-foreground">
         Waiting for challenger
       </p>
       <div className="mt-6">
@@ -165,7 +166,7 @@ export function EmptyBattle() {
         <GhostPanel label="@???" />
         <VsBadge />
       </div>
-      <p className="wait-pulse mt-6 text-center text-sm font-extrabold uppercase text-neutral-500">
+      <p className="wait-pulse mt-6 text-center text-sm font-extrabold uppercase text-muted-foreground">
         Waiting for challenger
       </p>
       <div className="mt-6">

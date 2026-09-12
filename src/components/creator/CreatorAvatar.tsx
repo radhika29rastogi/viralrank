@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { SmartImage } from "@/components/media/SmartImage";
 
 export function CreatorAvatar({
   name,
@@ -21,14 +22,13 @@ export function CreatorAvatar({
   return (
     <div
       className={cn(
-        "overflow-hidden border-[3px] border-black bg-sky",
+        "relative overflow-hidden border-[3px] border-border bg-sky",
         sizes[size],
         className,
       )}
     >
       {imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={imageUrl} alt="" className="size-full object-cover" />
+        <SmartImage src={imageUrl} className="size-full" size={size === "xl" ? "xl" : size === "lg" ? "lg" : "md"} />
       ) : (
         <div className="flex size-full items-center justify-center font-extrabold">
           {name.slice(0, 1).toUpperCase()}

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { applyArenaPayment } from "@/lib/arena/apply-payment";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRazorpay } from "@/lib/razorpay/client";
 import { processListingPaymentWebhook } from "@/lib/razorpay/listing-payment";
@@ -32,13 +33,38 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
   }
 
+  const payment = event.payload?.payment?.entity;
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  await admin.from("webhook_logs").insert({
+    provider: "razorpay",
+    event_type: event.event ?? null,
+    razorpay_payment_id: payment?.id ?? null,
+    payload: event,
+  });
+  await admin.from("webhook_logs").delete().lt("created_at", thirtyDaysAgo);
+
   if (event.event !== "payment.captured" && event.event !== "order.paid") {
     return NextResponse.json({ ok: true, ignored: true });
   }
 
-  const payment = event.payload?.payment?.entity;
   if (!payment?.id) {
     return NextResponse.json({ error: "Missing payment." }, { status: 400 });
+  }
+
+  if (payment.notes?.kind === "arena_payment" || payment.order_id) {
+    const { data: arenaRow } = await admin
+      .from("payments")
+      .select("id")
+      .eq("razorpay_order_id", payment.order_id)
+      .maybeSingle();
+    if (arenaRow?.id) {
+      const applied = await applyArenaPayment(admin, payment, event);
+      if (!applied.ok) {
+        console.error("[webhook/razorpay] arena payment failed", applied.error);
+        return NextResponse.json({ error: applied.error }, { status: 400 });
+      }
+      return NextResponse.json({ kind: "arena_payment", ...applied });
+    }
   }
 
   const kind = payment.notes?.kind;
