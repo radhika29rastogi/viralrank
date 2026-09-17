@@ -33,11 +33,11 @@ export const metadata: Metadata = {
     url: siteUrl(),
     siteName: "ViralRank.buzz",
     type: "website",
-    images: [{ url: "/viralrank-logo.jpg" }],
+    images: [{ url: "/viralrank-logo.jpg", width: 1024, height: 1020, alt: "ViralRank.buzz" }],
   },
   icons: {
-    icon: "/viralrank-logo.jpg",
-    apple: "/viralrank-logo.jpg",
+    icon: [{ url: "/favicon.ico", sizes: "32x32" }],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180" }],
   },
 };
 
