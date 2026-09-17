@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { ArenaSubmitForm } from "@/components/creator/ArenaSubmitForm";
 import { BrandLogo } from "@/components/layout/BrandLogo";
 import { DisplayHeadline } from "@/components/system";
+import { MIN_HYPE_AMOUNT, MIN_RANKING_BID } from "@/lib/ranking";
 
 export const metadata: Metadata = {
   title: "Submit a creator",
@@ -19,8 +20,9 @@ export default function SubmitPage() {
             Submit. Hype. Rank.
           </DisplayHeadline>
           <p className="mt-2 text-muted-foreground">
-            Paste an Instagram URL. We fetch the real profile. New listings claim rank from ₹199.
-            Hype (₹49+) is only for creators already on the ranking. No signup.
+            Paste an Instagram URL. We fetch the real profile. New listings claim rank from ₹
+            {MIN_RANKING_BID.toLocaleString("en-IN")}. Hype (₹{MIN_HYPE_AMOUNT.toLocaleString("en-IN")}+)
+            is only for creators already on the ranking. No signup.
           </p>
         </div>
       </div>

@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { PUBLIC_CREATOR_STATUS, PUBLIC_LISTING_PAYMENT_STATUS } from "@/lib/creators/public";
+import { categoryIcon, sortCategoriesForUi } from "@/lib/categories";
+import { MIN_RANKING_BID, rankingScore } from "@/lib/ranking";
 import { ensureCategoriesSeeded } from "@/lib/supabase/seed-categories";
 import type { Battle, Category, Creator, Hype, RankingBid } from "@/types/database";
 
@@ -25,6 +27,11 @@ const creatorSelect = `
   instagram_data_source,
   current_highest_bid,
   current_rank_bid,
+  ranking_score,
+  ranking_score_at,
+  combined_score,
+  score_reached_at,
+  verified_hype_total,
   current_rank,
   rank_set_at,
   stats_fetched_at,
@@ -66,9 +73,19 @@ async function getListingClient(): Promise<ListingClient | null> {
 async function attachCategories(client: ListingClient, rows: Creator[]): Promise<Creator[]> {
   const ids = [...new Set(rows.map((row) => row.category_id).filter(Boolean))] as string[];
   if (!ids.length) return rows;
-  const { data, error } = await client.from("categories").select("id, name, slug").in("id", ids);
+  let { data, error } = await client.from("categories").select("id, name, slug, icon").in("id", ids);
+  if (error) {
+    const fallback = await client.from("categories").select("id, name, slug").in("id", ids);
+    data = fallback.data;
+    error = fallback.error;
+  }
   logQueryError("attachCategories", error);
-  const map = new Map(((data as Category[]) ?? []).map((category) => [category.id, category]));
+  const map = new Map(
+    ((data as Category[]) ?? []).map((category) => [
+      category.id,
+      { ...category, icon: categoryIcon(category.slug, category.icon) },
+    ]),
+  );
   return rows.map((row) => ({
     ...row,
     categories: row.category_id ? (map.get(row.category_id) ?? null) : null,
@@ -82,18 +99,81 @@ function asCreators(rows: Creator[] | null | undefined): Creator[] {
   }));
 }
 
+type LiveRankRow = {
+  creator_id: string;
+  combined_score: number | null;
+  score_reached_at: string | null;
+  live_rank: number | string;
+};
+
+function overlayLiveRanks(rows: Creator[], live: LiveRankRow[]): Creator[] {
+  const byId = new Map(live.map((row) => [row.creator_id, row]));
+  const byRank = new Map(live.map((row) => [Number(row.live_rank), row]));
+  return rows.map((row) => {
+    const hit = byId.get(row.id);
+    const liveRank = hit ? Number(hit.live_rank) : null;
+    const combined = Number(
+      hit?.combined_score ??
+        row.combined_score ??
+        rankingScore(Number(row.current_highest_bid || 0), Number(row.total_hype_amount || 0)),
+    );
+    const targetRank = liveRank && liveRank > 1 ? liveRank - 1 : 1;
+    const rival = byRank.get(targetRank);
+    const rivalCombined = rival ? Number(rival.combined_score ?? combined) : combined;
+    const reachedAt = hit?.score_reached_at ?? row.score_reached_at ?? row.ranking_score_at ?? null;
+    return {
+      ...row,
+      current_rank: liveRank,
+      combined_score: combined,
+      ranking_score: combined,
+      score_reached_at: reachedAt,
+      ranking_score_at: reachedAt,
+      target_rank: targetRank,
+      rival_combined_score: rivalCombined,
+    };
+  });
+}
+
+async function attachLiveRanks(client: ListingClient, rows: Creator[]): Promise<Creator[]> {
+  if (!rows.length) return rows;
+  const { data, error } = await client
+    .from("creator_live_ranks")
+    .select("creator_id, combined_score, score_reached_at, live_rank");
+  logQueryError("attachLiveRanks", error);
+  if (error || !data) {
+    return overlayLiveRanks(rows, []);
+  }
+  return overlayLiveRanks(rows, data as LiveRankRow[]);
+}
+
+function decorateCategory(row: Category): Category {
+  const slug = row.slug?.trim().toLowerCase() ?? "";
+  const name = row.name?.trim() ?? "";
+  return {
+    ...row,
+    slug,
+    name,
+    icon: categoryIcon(slug, row.icon),
+  };
+}
+
 function dedupeCategories(rows: Category[]): Category[] {
   const seen = new Set<string>();
   const items: Category[] = [];
   for (const row of rows) {
-    const slug = row.slug?.trim().toLowerCase();
-    const name = row.name?.trim();
-    if (!slug || !name || !row.id) continue;
-    if (seen.has(slug)) continue;
-    seen.add(slug);
-    items.push({ ...row, slug, name });
+    const next = decorateCategory(row);
+    if (!next.slug || !next.name || !row.id) continue;
+    if (seen.has(next.slug)) continue;
+    seen.add(next.slug);
+    items.push(next);
   }
-  return items;
+  return sortCategoriesForUi(items);
+}
+
+async function fetchCategoryRows(client: ListingClient) {
+  const withIcon = await client.from("categories").select("id, name, slug, icon").order("name");
+  if (!withIcon.error) return withIcon;
+  return client.from("categories").select("id, name, slug").order("name");
 }
 
 export async function getCategories(): Promise<{ items: Category[]; error?: string }> {
@@ -104,7 +184,7 @@ export async function getCategories(): Promise<{ items: Category[]; error?: stri
       console.error("[getCategories] seed failed", seed.message);
       return { items: [], error: seed.message };
     }
-    const { data, error } = await admin.from("categories").select("id, name, slug").order("name");
+    const { data, error } = await fetchCategoryRows(admin);
     if (error) {
       console.error("[getCategories] admin query failed", error.message);
       return { items: [], error: error.message };
@@ -114,7 +194,7 @@ export async function getCategories(): Promise<{ items: Category[]; error?: stri
 
   const supabase = await createClient();
   if (!supabase) return { items: [], error: "Supabase is not configured." };
-  const { data, error } = await supabase.from("categories").select("id, name, slug").order("name");
+  const { data, error } = await fetchCategoryRows(supabase);
   if (error) {
     console.error("[getCategories] anon query failed", error.message);
     return { items: [], error: error.message };
@@ -122,7 +202,7 @@ export async function getCategories(): Promise<{ items: Category[]; error?: stri
   return { items: dedupeCategories((data as Category[]) ?? []) };
 }
 
-/** Categories for submit — seeds when empty, returns all DB rows sorted by name. */
+/** Categories for submit — seeds missing catalog rows, returns all DB rows. */
 export async function getSubmitCategories(): Promise<{ items: Category[]; error?: string }> {
   return getCategories();
 }
@@ -137,7 +217,8 @@ export async function getCreatorByUsername(username: string) {
   const creator = (data as Creator | null) ?? null;
   if (!creator) return null;
   const [withCategory] = await attachCategories(supabase, asCreators([creator]));
-  return withCategory ?? null;
+  const [withRank] = await attachLiveRanks(supabase, withCategory ? [withCategory] : []);
+  return withRank ?? null;
 }
 
 export async function getCreators(options: {
@@ -178,8 +259,8 @@ export async function getCreators(options: {
     case "trending":
       query = query
         .order("hype_count", { ascending: false })
-        .order("current_rank", { ascending: true, nullsFirst: false })
-        .order("published_at", { ascending: false, nullsFirst: false });
+        .order("combined_score", { ascending: false, nullsFirst: false })
+        .order("score_reached_at", { ascending: true, nullsFirst: false });
       break;
     case "clicks":
       query = query.order("profile_clicks", { ascending: false });
@@ -192,31 +273,83 @@ export async function getCreators(options: {
       break;
     default:
       query = query
-        .order("current_highest_bid", { ascending: false })
-        .order("rank_set_at", { ascending: true, nullsFirst: false });
+        .order("combined_score", { ascending: false, nullsFirst: false })
+        .order("score_reached_at", { ascending: true, nullsFirst: false });
   }
 
   const limit = options.limit ?? 24;
   const offset = options.offset ?? 0;
   const { data, count, error } = await query.range(offset, offset + limit - 1);
   logQueryError("getCreators", error);
-  const items = await attachCategories(supabase, asCreators(data as Creator[] | null));
+  const items = await attachLiveRanks(
+    supabase,
+    await attachCategories(supabase, asCreators(data as Creator[] | null)),
+  );
   return { items, total: count ?? 0 };
 }
 
+function paidBattleScore(row: Pick<Creator, "combined_score" | "current_highest_bid" | "total_hype_amount">) {
+  return Number(
+    row.combined_score ??
+      rankingScore(Number(row.current_highest_bid || 0), Number(row.total_hype_amount || 0)),
+  );
+}
+
+function sortLiveRankRows(rows: LiveRankRow[]) {
+  return [...rows].sort((a, b) => {
+    const rankDelta = Number(a.live_rank) - Number(b.live_rank);
+    if (rankDelta) return rankDelta;
+    const scoreDelta = Number(b.combined_score ?? 0) - Number(a.combined_score ?? 0);
+    if (scoreDelta) return scoreDelta;
+    const aAt = a.score_reached_at ?? "";
+    const bAt = b.score_reached_at ?? "";
+    return aAt.localeCompare(bAt);
+  });
+}
+
+async function getTopTwoByOrder(supabase: ListingClient): Promise<Creator[]> {
+  const { data, error } = await publicCreatorFilters(
+    supabase.from("creators").select(creatorSelect),
+  )
+    .gt("combined_score", 0)
+    .order("combined_score", { ascending: false, nullsFirst: false })
+    .order("score_reached_at", { ascending: true, nullsFirst: false })
+    .limit(2);
+
+  logQueryError("getTopTwo", error);
+  const rows = await attachLiveRanks(
+    supabase,
+    await attachCategories(supabase, asCreators(data as Creator[] | null)),
+  );
+  return rows.filter((row) => paidBattleScore(row) > 0).slice(0, 2);
+}
+
+/** Live #1 and #2 by RANK() over combined_score. Never reads the battles history table. */
 export async function getTopTwo(): Promise<Creator[]> {
   const supabase = await getListingClient();
   if (!supabase) return [];
 
-  const { data, error } = await publicCreatorFilters(
-    supabase.from("creators").select(creatorSelect),
-  )
-    .not("current_rank", "is", null)
-    .order("current_rank", { ascending: true })
-    .limit(2);
+  const { data: ranks, error } = await supabase
+    .from("creator_live_ranks")
+    .select("creator_id, live_rank, combined_score, score_reached_at")
+    .lte("live_rank", 2);
 
-  logQueryError("getTopTwo", error);
-  return attachCategories(supabase, asCreators(data as Creator[] | null));
+  if (error) {
+    logQueryError("getTopTwo", error);
+    return getTopTwoByOrder(supabase);
+  }
+
+  const ids = [
+    ...new Set(
+      sortLiveRankRows((ranks ?? []) as LiveRankRow[])
+        .filter((row) => Number(row.live_rank) <= 2 && Number(row.combined_score) > 0)
+        .slice(0, 2)
+        .map((row) => row.creator_id),
+    ),
+  ];
+  if (!ids.length) return getTopTwoByOrder(supabase);
+  const pair = (await getPublicCreatorsByIds(ids)).filter((row) => paidBattleScore(row) > 0);
+  return pair.length ? pair : getTopTwoByOrder(supabase);
 }
 
 async function getPublicCreatorsByIds(ids: string[]): Promise<Creator[]> {
@@ -226,7 +359,10 @@ async function getPublicCreatorsByIds(ids: string[]): Promise<Creator[]> {
     supabase.from("creators").select(creatorSelect).in("id", ids),
   );
   logQueryError("getPublicCreatorsByIds", error);
-  const rows = await attachCategories(supabase, asCreators(data as Creator[] | null));
+  const rows = await attachLiveRanks(
+    supabase,
+    await attachCategories(supabase, asCreators(data as Creator[] | null)),
+  );
   const byId = new Map(rows.map((row) => [row.id, row]));
   return ids.map((id) => byId.get(id)).filter((row): row is Creator => Boolean(row));
 }
@@ -326,7 +462,7 @@ export async function getLiveStats() {
     supabase.from("creators").select("id", { count: "exact", head: true }),
   );
   const creatorsQuery = publicCreatorFilters(
-    supabase.from("creators").select("id", { count: "exact", head: true }).not("current_rank", "is", null),
+    supabase.from("creators").select("id", { count: "exact", head: true }).gt("combined_score", 0),
   );
 
   const [
@@ -381,11 +517,11 @@ export async function getRankedCreators(options: {
   range?: "all" | "today";
   limit?: number;
 }) {
-  const { getCategoryTopBid, getVerifiedRankBids } = await import("@/lib/arena/bids");
+  const { getPeriodRankingScores, sortByRankingScore } = await import("@/lib/arena/ranking");
   const { startOfTodayIst } = await import("@/lib/arena/time");
   const supabase = await getListingClient();
   const admin = createAdminClient() ?? supabase;
-  if (!supabase || !admin) return { items: [] as RankedCreator[], claimPrice: 199, categoryId: null as string | null };
+  if (!supabase || !admin) return { items: [] as RankedCreator[], claimPrice: MIN_RANKING_BID, categoryId: null as string | null };
 
   let categoryId: string | null = null;
   if (options.category && options.category !== "all") {
@@ -396,37 +532,62 @@ export async function getRankedCreators(options: {
       .maybeSingle();
     categoryId = cat?.id ?? null;
     if (options.category && !categoryId) {
-      return { items: [] as RankedCreator[], claimPrice: 199, categoryId: null };
+      return { items: [] as RankedCreator[], claimPrice: MIN_RANKING_BID, categoryId: null };
     }
   }
 
-  const since = options.range === "today" ? startOfTodayIst().toISOString() : undefined;
-  const bids = await getVerifiedRankBids(admin, { since });
   const { items } = await getCreators({
     category: options.category,
     sort: "bid",
     limit: options.limit ?? 40,
   });
 
-  const ranked = items
-    .map((creator) => {
-      const amount =
-        options.range === "today"
-          ? bids.get(creator.id) ?? 0
-          : Math.max(
-              bids.get(creator.id) ?? 0,
-              Number(creator.current_rank_bid || creator.current_highest_bid || 0),
-            );
-      return { ...creator, rankAmount: amount };
-    })
-    .filter((creator) => creator.rankAmount > 0)
-    .sort((a, b) => b.rankAmount - a.rankAmount);
+  let ranked: RankedCreator[];
+  if (options.range === "today") {
+    const since = startOfTodayIst().toISOString();
+    const scores = await getPeriodRankingScores(admin, { since });
+    ranked = items
+      .map((creator) => {
+        const period = scores.get(creator.id);
+        return {
+          ...creator,
+          rankAmount: period?.score ?? 0,
+          ranking_score: period?.score ?? 0,
+          ranking_score_at: period?.scoreAt ?? creator.ranking_score_at,
+        };
+      })
+      .filter((creator) => creator.rankAmount > 0)
+      .sort((a, b) =>
+        sortByRankingScore(
+          { score: a.rankAmount, scoreAt: a.ranking_score_at ?? null },
+          { score: b.rankAmount, scoreAt: b.ranking_score_at ?? null },
+        ),
+      )
+      .map((creator, index, list) => {
+        const rival = list[index === 0 ? 0 : index - 1];
+        return {
+          ...creator,
+          current_rank: index + 1,
+          target_rank: index === 0 ? 1 : index,
+          rival_combined_score: rival?.rankAmount ?? creator.rankAmount,
+        };
+      });
+  } else {
+    ranked = items
+      .map((creator) => {
+        const score = Number(creator.combined_score ?? creator.ranking_score ?? 0);
+        return { ...creator, rankAmount: score };
+      })
+      .filter((creator) => creator.rankAmount > 0)
+      .sort((a, b) =>
+        sortByRankingScore(
+          { score: a.rankAmount, scoreAt: a.score_reached_at ?? a.ranking_score_at ?? null },
+          { score: b.rankAmount, scoreAt: b.score_reached_at ?? b.ranking_score_at ?? null },
+        ),
+      );
+  }
 
-  const top = await getCategoryTopBid(admin, {
-    categoryId,
-    range: options.range,
-  });
-  const claimPrice = top > 0 ? top + 100 : 199;
+  const claimPrice = MIN_RANKING_BID;
   return { items: ranked, claimPrice, categoryId };
 }
 
@@ -457,7 +618,8 @@ export async function getCreatorByEditToken(token: string) {
     .maybeSingle();
   if (byCreator) {
     const [withCategory] = await attachCategories(admin, asCreators([byCreator as Creator]));
-    return withCategory ?? null;
+    const [withRank] = await attachLiveRanks(admin, withCategory ? [withCategory] : []);
+    return withRank ?? null;
   }
   const { data: payment } = await admin
     .from("payments")
@@ -468,10 +630,12 @@ export async function getCreatorByEditToken(token: string) {
   const { data } = await admin.from("creators").select(creatorSelect).eq("id", payment.creator_id).maybeSingle();
   if (!data) return null;
   const [withCategory] = await attachCategories(admin, asCreators([data as Creator]));
-  return withCategory ?? null;
+  const [withRank] = await attachLiveRanks(admin, withCategory ? [withCategory] : []);
+  return withRank ?? null;
 }
 
-export async function getLiveBattle(): Promise<Battle | null> {
+/** History log only. Live widgets must use getTopTwo(), not this row. */
+export async function getLiveBattleHistory(): Promise<Battle | null> {
   const supabase = await getListingClient();
   if (!supabase) return null;
   const { data, error } = await supabase
@@ -481,7 +645,7 @@ export async function getLiveBattle(): Promise<Battle | null> {
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  logQueryError("getLiveBattle", error);
+  logQueryError("getLiveBattleHistory", error);
   const battle = (data as Battle | null) ?? null;
   if (!battle) return null;
   const pair = await getPublicCreatorsByIds([battle.creator_one_id, battle.creator_two_id]);
@@ -491,6 +655,41 @@ export async function getLiveBattle(): Promise<Battle | null> {
     creator_one: byId.get(battle.creator_one_id) ?? null,
     creator_two: byId.get(battle.creator_two_id) ?? null,
   };
+}
+
+export async function getHomeBattleContext() {
+  const { getDailyBattleResult, yesterdayBattleDate, todayBattleDate } = await import("@/lib/arena/battle");
+  const { isPastEightPmIst } = await import("@/lib/arena/time");
+  const admin = createAdminClient();
+  const leaders = await getTopTwo();
+  if (!admin) {
+    return { leaders, yesterday: null, todayFinal: null as Awaited<ReturnType<typeof getDailyBattleResult>> };
+  }
+  const yDate = yesterdayBattleDate();
+  const [yesterdayRaw, todayRaw] = await Promise.all([
+    getDailyBattleResult(admin, yDate),
+    isPastEightPmIst() ? getDailyBattleResult(admin, todayBattleDate()) : Promise.resolve(null),
+  ]);
+  const ids = [
+    yesterdayRaw?.winner_id,
+    yesterdayRaw?.creator_one_id,
+    yesterdayRaw?.creator_two_id,
+    todayRaw?.winner_id,
+    todayRaw?.creator_one_id,
+    todayRaw?.creator_two_id,
+  ].filter((id): id is string => Boolean(id));
+  const people = await getPublicCreatorsByIds([...new Set(ids)]);
+  const byId = new Map(people.map((row) => [row.id, row]));
+  const attach = (row: typeof yesterdayRaw) =>
+    row
+      ? {
+          ...row,
+          winner: row.winner_id ? byId.get(row.winner_id) ?? null : null,
+          creator_one: row.creator_one_id ? byId.get(row.creator_one_id) ?? null : null,
+          creator_two: row.creator_two_id ? byId.get(row.creator_two_id) ?? null : null,
+        }
+      : null;
+  return { leaders, yesterday: attach(yesterdayRaw), todayFinal: attach(todayRaw) };
 }
 
 export async function getRecentActivity(limit = 16) {
@@ -551,7 +750,7 @@ export async function getDashboardData(userId: string) {
   }
 
   return {
-    creators: await attachCategories(supabase, asCreators(creators as Creator[] | null)),
+    creators: await attachLiveRanks(supabase, await attachCategories(supabase, asCreators(creators as Creator[] | null))),
     bids: (bids as RankingBid[]) ?? [],
     hypes: (hypes as Hype[]) ?? [],
     history,

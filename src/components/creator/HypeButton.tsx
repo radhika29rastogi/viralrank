@@ -39,7 +39,7 @@ export function HypeButton({
         icon={<FireIcon className="size-4" />}
         onClick={() => setOpen(true)}
       >
-        {label ?? (compact ? `Hype this creator ₹${MIN_HYPE}+${countLabel}` : `Hype this creator ₹${MIN_HYPE}+`)}
+        {label ?? (compact ? `Hype ₹${MIN_HYPE}+${countLabel}` : `Hype this creator ₹${MIN_HYPE}+`)}
       </BoldButton>
       <PaymentModal
         key={`${open}-hype`}

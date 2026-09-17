@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BoldButton, ColorBlock } from "@/components/system";
+import { categoryIcon } from "@/lib/categories";
 import type { Category } from "@/types/database";
 
 const sorts = [
@@ -98,7 +99,7 @@ export function ListingFilters({
           <option value="all">All categories</option>
           {categories.map((c) => (
             <option key={c.id} value={c.slug}>
-              {c.name}
+              {categoryIcon(c.slug, c.icon)} {c.name}
             </option>
           ))}
         </select>

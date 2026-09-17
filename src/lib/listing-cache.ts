@@ -3,7 +3,8 @@ import {
   getArenaFeed,
   getCategories,
   getCreators,
-  getLiveBattle,
+  getHomeBattleContext,
+  getPublicStats,
   getRankedCreators,
   getTopTwo,
 } from "@/lib/queries";
@@ -69,9 +70,16 @@ export function cachedTopTwo() {
   })();
 }
 
-export function cachedLiveBattle() {
-  return unstable_cache(() => getLiveBattle(), ["live-battle"], {
+export function cachedHomeBattleContext() {
+  return unstable_cache(() => getHomeBattleContext(), ["home-battle-context"], {
     revalidate: LISTING_REVALIDATE_SECONDS,
     tags: ["listings"],
+  })();
+}
+
+export function cachedPublicStats() {
+  return unstable_cache(() => getPublicStats(), ["public-stats"], {
+    revalidate: 60,
+    tags: ["stats"],
   })();
 }

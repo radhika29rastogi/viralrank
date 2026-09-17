@@ -17,8 +17,9 @@ export default function AboutPage() {
         <p className="text-muted-foreground">
           ViralRank is a paid creator ranking arena. Paste an Instagram handle — no signup — and we
           fetch the display name, photo, and follower count from a third-party Instagram data API.
-          Rank is the highest verified rank bid. Hype is separate community support and never moves
-          the leaderboard.
+          Rank is combined score: highest verified rank bid plus verified hype. Hype adds directly to
+          a creator&apos;s score. Ranking bids and hype both count toward rank. Coupons discount the
+          charge, not the ranked amount.
         </p>
       </ColorBlock>
       <Disclaimer />

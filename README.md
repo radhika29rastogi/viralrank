@@ -24,8 +24,9 @@ Next.js (App Router) · TypeScript · Tailwind · shadcn/ui · Supabase · Razor
    - `supabase/migrations/0008_hide_payment_pii.sql` (**required** — hide supporter emails and Razorpay signatures from the anon key)
    - `supabase/migrations/0010_no_auth_pay_to_rank.sql` (**required** — `payments`, Instagram cache, visits, rank-by-max-bid)
    - If you previously applied a review-queue migration, also run `supabase/migrations/0005_restore_listing_auto_publish.sql`
+   - `supabase/migrations/0013_category_niches.sql` (**required** — category icons + Indian creator niches)
    - **Categories only?** Run `supabase/seed/categories.sql` instead of relying on auto-seed.
-   - On first load of `/submit` or `POST /api/creators`, the server also auto-seeds categories via the service role when the table exists but is empty.
+   - `GET /api/categories` upserts any missing catalog rows via the service role (not only when the table is empty).
    - **Demo listings for an empty site:** run `supabase/seed/demo-creators.sql` (20 `vrseed_*` creators, already paid/visible).
 4. From Supabase **Project Settings → API**, copy:
    - **Project URL** → `NEXT_PUBLIC_SUPABASE_URL` (use `https://<ref>.supabase.co` only — **not** the `/rest/v1` REST endpoint)
@@ -81,10 +82,10 @@ Listing and hype still use the flows below. `RAZORPAY_KEY_SECRET` is server-only
 ### Hype, battles, and click tracking
 
 - **Paid hype only:** `POST /api/payments/order` with `kind: "hype"` (₹49+) → Razorpay → verified RPC. Free hype API returns 403.
-- Rank formula (server): `hype_count` → `total_hype_amount` → `current_highest_bid` → `published_at`.
+- Rank formula (server): generated `combined_score = current_highest_bid + total_hype_amount`. Live rank is `RANK()` over that score, then `score_reached_at`.
 - Profile views: `POST /api/profile-clicks` (6h cookie dedup + rate limit).
 - Instagram outbound: `GET /api/creators/[id]/instagram` records click then redirects (instagram.com hosts only).
-- Live battle UI (`/battles`) loads top two ranked published creators from the database.
+- Live battle UI (homepage + `/battles`) is whoever holds live rank 1 and 2 by `combined_score` (`creator_live_ranks`). Creators with `combined_score = 0` never appear. The `battles` table is pairing history only. Daily 8:00 PM IST results do not choose the pair.
 
 Public queries and RLS only expose creators where `status = 'active'` **and** `listing_payment_status = 'paid'`.
 
@@ -94,7 +95,7 @@ The Creators carousel on `/` shows only published (paid + active) creators from 
 
 Confirm with Razorpay that a pay-to-outrank leaderboard fits their merchant terms before going live.
 
-Ranking and hype totals are written only by the verified webhook using the service role. Client JWT roles cannot update `current_highest_bid`, `current_rank`, `is_verified`, or related fields.
+Ranking and hype totals are written only by the verified webhook using the service role. Client JWT roles cannot update `current_highest_bid`, `total_hype_amount`, `is_verified`, or related scoring fields. Live rank is `RANK()` over generated `combined_score`, not a stored `current_rank`.
 
 ## Rank a Creator (manual form)
 

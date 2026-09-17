@@ -16,7 +16,7 @@ export async function getVerifiedRankBids(
   const map = new Map<string, number>();
   const payments = admin
     .from("payments")
-    .select("creator_id, amount_inr, created_at")
+    .select("creator_id, bid_amount, amount_inr, created_at")
     .eq("type", "rank_bid")
     .eq("status", "verified")
     .not("creator_id", "is", null);
@@ -31,7 +31,7 @@ export async function getVerifiedRankBids(
   ]);
 
   for (const row of payRes.data ?? []) {
-    bump(map, row.creator_id as string, Number(row.amount_inr));
+    bump(map, row.creator_id as string, Number(row.bid_amount || row.amount_inr));
   }
   for (const row of legacyRes.data ?? []) {
     bump(map, row.creator_id as string, Number(row.amount));
@@ -43,7 +43,7 @@ export async function getCreatorVerifiedBid(admin: SupabaseClient, creatorId: st
   const [pay, legacy] = await Promise.all([
     admin
       .from("payments")
-      .select("amount_inr")
+      .select("bid_amount, amount_inr")
       .eq("creator_id", creatorId)
       .eq("type", "rank_bid")
       .eq("status", "verified")
@@ -59,7 +59,10 @@ export async function getCreatorVerifiedBid(admin: SupabaseClient, creatorId: st
       .limit(1)
       .maybeSingle(),
   ]);
-  return Math.max(Number(pay.data?.amount_inr || 0), Math.round(Number(legacy.data?.amount || 0)));
+  return Math.max(
+    Number(pay.data?.bid_amount || pay.data?.amount_inr || 0),
+    Math.round(Number(legacy.data?.amount || 0)),
+  );
 }
 
 export async function getCategoryTopBid(

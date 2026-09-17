@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BoldButton, ColorBlock } from "@/components/system";
 import { SmartImage } from "@/components/media/SmartImage";
 import { Input } from "@/components/ui/input";
-import { ARENA_CATEGORY_TABS } from "@/lib/categories";
+import { AmountInput, amountIsValid } from "@/components/payments/AmountInput";
+import { CouponField, type AppliedCoupon } from "@/components/payments/CouponField";
+import { categoryIcon } from "@/lib/categories";
+import { useCategories } from "@/lib/use-categories";
 import { formatNumber } from "@/lib/format";
-import { MIN_HYPE, MIN_RANKING_BID } from "@/lib/ranking";
+import { HYPE_RANK_COPY, MIN_HYPE, MIN_RANKING_BID, bidNeededForRank, minOvertakeAmount } from "@/lib/ranking";
 import { openRazorpayCheckout } from "@/lib/razorpay/checkout-client";
 import { RAZORPAY_CHECKOUT_THEME } from "@/lib/design";
 import type { InstagramProfileSnapshot } from "@/lib/instagram/types";
@@ -21,16 +24,31 @@ export function ArenaSubmitForm() {
   const [category, setCategory] = useState(search.get("category") || "memes");
   const [profile, setProfile] = useState<InstagramProfileSnapshot | null>(null);
   const [listed, setListed] = useState(false);
+  const [currentHighestBid, setCurrentHighestBid] = useState(0);
+  const [totalHypeAmount, setTotalHypeAmount] = useState(0);
+  const [rivalCombinedScore, setRivalCombinedScore] = useState(0);
+  const [targetRank, setTargetRank] = useState(1);
   const [lookupError, setLookupError] = useState("");
   const [looking, setLooking] = useState(false);
   const [type, setType] = useState<"rank_bid" | "hype">("rank_bid");
-  const [amount, setAmount] = useState(Number(search.get("amount")) || MIN_RANKING_BID);
+  const [amount, setAmount] = useState<number | "">(Number(search.get("amount")) || MIN_RANKING_BID);
+  const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
   const [payState, setPayState] = useState<PayState>("idle");
   const [statusNote, setStatusNote] = useState("");
+  const { categories } = useCategories();
 
   const payType = listed ? type : "rank_bid";
-  const minAmount = payType === "hype" ? MIN_HYPE : MIN_RANKING_BID;
-  const displayAmount = useMemo(() => Math.max(amount, minAmount), [amount, minAmount]);
+  const minAmount =
+    payType === "hype" ? MIN_HYPE : listed ? minOvertakeAmount(currentHighestBid) : MIN_RANKING_BID;
+  const suggestedAmount =
+    payType === "hype"
+      ? MIN_HYPE
+      : listed
+        ? bidNeededForRank(currentHighestBid, totalHypeAmount, rivalCombinedScore || 0)
+        : MIN_RANKING_BID;
+  const valid = amountIsValid(amount, minAmount);
+  const typed = typeof amount === "number" ? amount : minAmount;
+  const charge = coupon && coupon.amountBefore === typed ? coupon.amountAfter : typed;
 
   useEffect(() => {
     if (search.get("handle")) {
@@ -44,6 +62,7 @@ export function ArenaSubmitForm() {
     setLookupError("");
     setProfile(null);
     setListed(false);
+    setCoupon(null);
     try {
       const res = await fetch("/api/instagram/lookup", {
         method: "POST",
@@ -53,6 +72,10 @@ export function ArenaSubmitForm() {
       const json = (await res.json()) as {
         profile?: InstagramProfileSnapshot;
         listed?: boolean;
+        current_highest_bid?: number;
+        total_hype_amount?: number;
+        rival_combined_score?: number;
+        target_rank?: number;
         error?: string;
         message?: string;
       };
@@ -61,15 +84,27 @@ export function ArenaSubmitForm() {
         return;
       }
       const alreadyListed = Boolean(json.listed);
+      const liveBid = Number(json.current_highest_bid || 0);
+      const hypeTotal = Number(json.total_hype_amount || 0);
+      const rival = Number(json.rival_combined_score || 0);
+      const takeRank = Number(json.target_rank || 1);
       setProfile(json.profile);
       setHandle(json.profile.handle);
       setListed(alreadyListed);
+      setCurrentHighestBid(liveBid);
+      setTotalHypeAmount(hypeTotal);
+      setRivalCombinedScore(rival);
+      setTargetRank(takeRank);
       if (alreadyListed && search.get("intent") === "hype") {
         setType("hype");
         setAmount(MIN_HYPE);
       } else {
         setType("rank_bid");
-        setAmount(Number(search.get("amount")) || MIN_RANKING_BID);
+        const overtake = alreadyListed ? minOvertakeAmount(liveBid) : MIN_RANKING_BID;
+        const beat = bidNeededForRank(alreadyListed ? liveBid : 0, alreadyListed ? hypeTotal : 0, rival);
+        const fromQuery = Number(search.get("amount"));
+        const floor = Math.max(overtake, beat);
+        setAmount(fromQuery >= overtake ? fromQuery : floor);
       }
     } catch {
       setLookupError("Something went wrong fetching this profile");
@@ -110,7 +145,7 @@ export function ArenaSubmitForm() {
   }
 
   async function checkout() {
-    if (!profile) return;
+    if (!profile || !valid) return;
     setPayState("preparing");
     setStatusNote("");
     try {
@@ -120,8 +155,9 @@ export function ArenaSubmitForm() {
         body: JSON.stringify({
           instagram_handle: profile.handle,
           type: payType,
-          amount: displayAmount,
+          amount: typed,
           category,
+          coupon_code: payType === "rank_bid" ? coupon?.code : undefined,
         }),
       });
       const json = (await res.json()) as {
@@ -210,25 +246,30 @@ export function ArenaSubmitForm() {
                 type="button"
                 onClick={() => {
                   setType("rank_bid");
-                  setAmount(Math.max(amount, MIN_RANKING_BID));
+                  setAmount(bidNeededForRank(currentHighestBid, totalHypeAmount, rivalCombinedScore));
+                  setCoupon(null);
                 }}
                 className={`rounded-2xl border-[3px] border-border p-4 text-left font-extrabold ${type === "rank_bid" ? "bg-hot-pink text-on-accent" : "bg-card text-foreground"}`}
                 data-analytics="submit_choose_rank_bid"
               >
-                Rank Bid · ₹199+
-                <p className="mt-1 text-sm font-medium">Overtake the current #1. Bid must beat the live amount + ₹100.</p>
+                Rank Bid · ₹{minOvertakeAmount(currentHighestBid).toLocaleString("en-IN")}+
+                <p className="mt-1 text-sm font-medium">
+                  Minimum next bid: ₹{minOvertakeAmount(currentHighestBid).toLocaleString("en-IN")}. Beat ₹
+                  {bidNeededForRank(currentHighestBid, totalHypeAmount, rivalCombinedScore).toLocaleString("en-IN")} to take #{targetRank}.
+                </p>
               </button>
               <button
                 type="button"
                 onClick={() => {
                   setType("hype");
-                  setAmount(Math.max(MIN_HYPE, type === "hype" ? amount : MIN_HYPE));
+                  setAmount(MIN_HYPE);
+                  setCoupon(null);
                 }}
                 className={`rounded-2xl border-[3px] border-border p-4 text-left font-extrabold ${type === "hype" ? "bg-lemon text-on-accent" : "bg-card text-foreground"}`}
                 data-analytics="submit_choose_hype"
               >
-                Hype · ₹49+
-                <p className="mt-1 text-sm font-medium">Support them without changing rank. Unlimited times.</p>
+                Hype · ₹{MIN_HYPE.toLocaleString("en-IN")}+
+                <p className="mt-1 text-sm font-medium">{HYPE_RANK_COPY}</p>
               </button>
             </div>
           ) : (
@@ -236,9 +277,9 @@ export function ArenaSubmitForm() {
               className="rounded-2xl border-[3px] border-border bg-hot-pink p-4 text-left font-extrabold text-on-accent"
               data-analytics="submit_new_rank_bid"
             >
-              Rank Bid · ₹199
+              Rank Bid · ₹{MIN_RANKING_BID.toLocaleString("en-IN")}
               <p className="mt-1 text-sm font-medium">
-                First listing claims #1 for ₹199. Hype is for supporting creators who are already ranked.
+                First bid on a new creator is ₹{MIN_RANKING_BID.toLocaleString("en-IN")}. {HYPE_RANK_COPY}
               </p>
             </div>
           )}
@@ -250,35 +291,59 @@ export function ArenaSubmitForm() {
                 onChange={(e) => setCategory(e.target.value)}
                 className="h-12 w-full rounded-xl border-[3px] border-border bg-input-bg px-3 font-bold text-input-text"
               >
-                {ARENA_CATEGORY_TABS.filter((tab) => tab.slug !== "all").map((tab) => (
+                {categories.map((tab) => (
                   <option key={tab.slug} value={tab.slug}>
-                    {tab.emoji} {tab.label}
+                    {categoryIcon(tab.slug, tab.icon)} {tab.name}
                   </option>
                 ))}
               </select>
             </>
           )}
-          <label className="block text-sm font-extrabold">Amount (₹)</label>
-          <Input
-            type="number"
-            min={minAmount}
-            value={displayAmount}
-            onChange={(e) => setAmount(Number(e.target.value))}
-            className="border-[3px] border-border"
+          {payType === "rank_bid" ? (
+            <p className="text-sm font-bold text-muted-foreground">
+              Minimum next bid: ₹{minAmount.toLocaleString("en-IN")}. To reach #{targetRank}, you need a
+              combined score above ₹{Number(rivalCombinedScore || 0).toLocaleString("en-IN")}.
+            </p>
+          ) : (
+            <p className="text-sm font-bold text-muted-foreground">{HYPE_RANK_COPY}</p>
+          )}
+          <AmountInput
+            minAmount={minAmount}
+            suggestedAmount={suggestedAmount}
+            value={amount}
+            onChange={(next) => {
+              setAmount(next);
+              setCoupon(null);
+            }}
           />
+          {valid && payType === "rank_bid" ? (
+            <CouponField
+              amount={typed}
+              applied={coupon}
+              onApplied={setCoupon}
+              onCleared={() => setCoupon(null)}
+              disabled={payState === "preparing" || payState === "checkout" || payState === "verifying"}
+              paymentType="rank_bid"
+            />
+          ) : null}
           <BoldButton
             color="pink"
             size="lg"
             fullWidth
-            disabled={payState === "preparing" || payState === "checkout" || payState === "verifying"}
+            disabled={
+              !valid || payState === "preparing" || payState === "checkout" || payState === "verifying"
+            }
             onClick={() => void checkout()}
           >
-            {payState === "verifying" ? "Confirming payment…" : `Pay ₹${displayAmount} · no account needed`}
+            {payState === "verifying"
+              ? "Confirming payment…"
+              : `Pay ₹${charge.toLocaleString("en-IN")} · no account needed`}
           </BoldButton>
           {statusNote ? <p className="text-sm font-bold">{statusNote}</p> : null}
           <p className="text-xs text-muted-foreground">
             Razorpay collects email/phone for the receipt. We go live only after the server webhook verifies
-            payment. Rank bids are non-refundable regardless of final rank.
+            payment. Rank bids are non-refundable regardless of final rank. Coupons discount the charge, not
+            the ranked amount.
           </p>
         </ColorBlock>
       ) : null}

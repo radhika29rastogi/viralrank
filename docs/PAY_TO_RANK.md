@@ -14,11 +14,27 @@ ViralRank has **no signup/login**. Anyone pastes an Instagram handle, we fetch a
 
 ## Ranking
 
-Effective rank bid = `MAX(amount_inr)` of `payments` where `type='rank_bid'` and `status='verified'`. Postgres function `recompute_pay_to_rank()` updates `creators.current_rank_bid` / `current_rank`. Hype never changes rank.
+`combined_score = current_highest_bid + total_hype_amount` (Postgres generated column)
 
-**Today** = verified rank bids since midnight IST.
+- `current_highest_bid` = `MAX(bid_amount)` of verified `rank_bid` payments (never `amount_charged`).
+- `total_hype_amount` = `SUM(bid_amount)` of verified `hype` payments (never `amount_charged`).
+- Live rank is computed at query time: `RANK() OVER (ORDER BY combined_score DESC, score_reached_at ASC)` via view `creator_live_ranks`. Stored `current_rank` is a cache only (refreshed by `refresh_cached_current_rank()` on the daily battle cron). Leaderboard, battle, and profile always overlay the live rank. The battle widget reads live ranks 1 and 2 from that view — never a stale `battles` row. See [BATTLES.md](./BATTLES.md).
+- Tie-break: earlier `score_reached_at` (timestamp of the verified payment that last changed combined score) ranks higher.
+- Bid floor for a valid next bid is still `current_highest_bid + ₹100`. First listing is `MIN_RANKING_BID` (₹199). `bidNeededForRank` for a first listing (no current bid) is that same ₹199 — it does not add +1 over the rival score.
+- Atomic webhook writes: `finalize_combined_score_payment` verifies the payment row then `apply_combined_score_bid` / `apply_combined_score_hype` in the same transaction. Do not recompute every creator's stored rank on each payment.
+- **Today** = the same formula on verified payments since midnight IST.
+
+Do not compute rank in the browser. Coupons never change scoring value — `bid_amount` scores, `amount_charged` is what Razorpay collects.
 
 If two overtake bids race: the webhook re-checks. If the amount is no longer enough for #1, the row is still `verified` with `took_rank=false`. Money is not refunded. See `/terms` and `/rules`.
+
+## Coupons
+
+Generic codes live in `coupons` (seed `WELCOME50` = ₹50 off, 50 uses). **Coupons apply to ranking bids only** — hype checkout has no coupon UI, and `POST /api/coupons/preview` plus `createArenaOrder` reject `payment_type=hype` with "Coupons can only be applied to ranking bids." Preview does **not** increment `used_count`. Razorpay is charged `amount_charged` (never below `MIN_COUPON_CHARGE` / ₹49); rank uses `bid_amount`. `used_count` increments only in the verified webhook (`try_increment_coupon_use`).
+
+## Daily battle
+
+Independent of who is currently #1 vs #2. The pairing is live combined-score rank (see [BATTLES.md](./BATTLES.md)). Vercel Cron `30 14 * * *` (20:00 IST) hits `GET /api/cron/daily-battle` with `Authorization: Bearer CRON_SECRET`. Window is the previous 20:00 IST → this 20:00 IST. Winner = more verified hype in the window; if neither received hype (or hype ties), `profile_visits + 2×instagram_click_visits`. Stored in `daily_battle_results`. Does not freeze or replace the live pairing.
 
 ## Environment
 
@@ -30,12 +46,13 @@ If two overtake bids race: the webhook re-checks. If the amount is no longer eno
 | `RESEND_API_KEY` + `RESEND_FROM_EMAIL` | No | Receipt + manage-link email |
 | `ADMIN_SECRET` | No | `/admin?key=` moderation. No login. |
 | `RAZORPAY_*` | Yes | See [RAZORPAY.md](./RAZORPAY.md) |
+| `CRON_SECRET` | Yes (prod battle) | Vercel Cron bearer for `/api/cron/daily-battle` |
 
 Do not put provider keys on `NEXT_PUBLIC_*`.
 
 ## Schema
 
-Apply `supabase/migrations/0010_no_auth_pay_to_rank.sql` **before** deploying frontend that reads `payments`, `visits`, `instagram_profile_cache`, `current_rank_bid`, or `edit_token`.
+Apply `supabase/migrations/0010_no_auth_pay_to_rank.sql`, `0011_v3_ranking_coupons_battle.sql`, `0012_combined_score_live_rank.sql`, `0013_category_niches.sql`, and `0014_live_battle_pairing.sql` **before** deploying frontend that reads `combined_score`, `score_reached_at`, `bid_amount` / `amount_charged`, `coupons`, `daily_battle_results`, category `icon` / new niche slugs, or live battle history sync.
 
 Amounts: `payments.amount` is paise; `payments.amount_inr` is integer rupees.
 
@@ -65,6 +82,8 @@ The homepage does **not** fetch Instagram. The previous slow path was the root l
 `visits` records one row per browser session per IST day (`vr_session` cookie). Header and `/stats` show that count. There is no fake “online now” number in v1.
 
 Instagram click-throughs (`GET /api/creators/{id}/instagram` and `POST /api/creators/{id}/click`) increment at most once per visitor per creator per hour.
+
+Creator cards show only explainable counters: **HYPE** (`hype_count` of verified hype payments), **Views** (`profile_clicks`), **Instagram** (`instagram_clicks`), and **Engagement** (those three added together). Do not display a “Viral” index — the old `viralScore()` was a 1–99 log mix of hype rupees, Instagram followers, bid, and clicks with arbitrary weights. It was not ranking and could not be explained to users.
 
 ## Out of scope
 

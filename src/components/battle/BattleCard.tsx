@@ -5,6 +5,7 @@ import { CreatorAvatar } from "@/components/creator/CreatorAvatar";
 import { HypeButton } from "@/components/creator/HypeButton";
 import { formatCompactCount } from "@/lib/creator-stats";
 import { displayRank } from "@/lib/creator-engagement";
+import { rankingScore } from "@/lib/ranking";
 import type { Creator } from "@/types/database";
 
 const panelTone = ["from-hot-pink to-coral", "from-sky to-lavender"];
@@ -159,7 +160,7 @@ export function EmptyBattle() {
         Live battle
       </Badge>
       <Badge color="yellow" rotate={2} float="tr">
-        Open slot
+        Arena warming up
       </Badge>
       <div className="relative mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
         <GhostPanel label="@???" />
@@ -167,7 +168,7 @@ export function EmptyBattle() {
         <VsBadge />
       </div>
       <p className="wait-pulse mt-6 text-center text-sm font-extrabold uppercase text-muted-foreground">
-        Waiting for challenger
+        Arena warming up
       </p>
       <div className="mt-6">
         <BoldButton href="/submit" color="yellow" size="lg" fullWidth>
@@ -185,11 +186,20 @@ export function ArenaBattle({
   leaders: Creator[];
   showNewOne?: boolean;
 }) {
-  if (leaders.length >= 2) {
-    return <BattleCard one={leaders[0]} two={leaders[1]} showNewOne={showNewOne} />;
+  const pair = leaders
+    .filter((row) => {
+      const score = Number(
+        row.combined_score ??
+          rankingScore(Number(row.current_highest_bid || 0), Number(row.total_hype_amount || 0)),
+      );
+      return score > 0;
+    })
+    .slice(0, 2);
+  if (pair.length >= 2) {
+    return <BattleCard one={pair[0]} two={pair[1]} showNewOne={showNewOne} />;
   }
-  if (leaders.length === 1) {
-    return <DefendingChampion creator={leaders[0]} />;
+  if (pair.length === 1) {
+    return <DefendingChampion creator={pair[0]} />;
   }
   return <EmptyBattle />;
 }

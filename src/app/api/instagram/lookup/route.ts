@@ -4,6 +4,8 @@ import { lookupInstagramProfile } from "@/lib/instagram/fetch-profile";
 import { parseInstagramProfileInput } from "@/lib/instagram/username";
 import { INSTAGRAM_LOOKUP_MESSAGES } from "@/lib/instagram/types";
 import { clientKey, rateLimit } from "@/lib/rate-limit";
+import { getCreatorByUsername, getTopTwo } from "@/lib/queries";
+import { rankingScore } from "@/lib/ranking";
 
 export async function POST(request: Request) {
   const limited = rateLimit(clientKey(request, "ig-lookup"), 8);
@@ -24,10 +26,23 @@ export async function POST(request: Request) {
   const parsed = parseInstagramProfileInput(json.handle ?? "");
   const listedRow = parsed.ok ? await getListedCreator(parsed.username) : null;
   if (listedRow) {
+    const ranked = await getCreatorByUsername(listedRow.instagram_username);
+    const hype = Number(ranked?.total_hype_amount ?? listedRow.total_hype_amount ?? 0);
+    const combined = Number(
+      ranked?.combined_score ??
+        listedRow.combined_score ??
+        rankingScore(Number(listedRow.current_highest_bid || 0), hype),
+    );
     return NextResponse.json({
       profile: listedCreatorToSnapshot(listedRow),
       cached: true,
       listed: true,
+      current_highest_bid: Number(listedRow.current_highest_bid || 0),
+      total_hype_amount: hype,
+      combined_score: combined,
+      live_rank: ranked?.current_rank ?? null,
+      target_rank: ranked?.target_rank ?? 1,
+      rival_combined_score: ranked?.rival_combined_score ?? combined,
     });
   }
 
@@ -43,5 +58,11 @@ export async function POST(request: Request) {
     profile: result.profile,
     cached: result.cached,
     listed: false,
+    current_highest_bid: 0,
+    total_hype_amount: 0,
+    combined_score: 0,
+    live_rank: null,
+    target_rank: 1,
+    rival_combined_score: Number((await getTopTwo())[0]?.combined_score ?? 0),
   });
 }

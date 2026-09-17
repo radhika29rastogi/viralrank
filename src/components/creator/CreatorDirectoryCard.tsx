@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Badge } from "@/components/system";
 import { CreatorAvatar } from "@/components/creator/CreatorAvatar";
 import { HypeButton } from "@/components/creator/HypeButton";
-import { formatCompactCount, viralScore } from "@/lib/creator-stats";
+import { formatCompactCount } from "@/lib/creator-stats";
 import { displayRank, totalEngagement } from "@/lib/creator-engagement";
 import { cn } from "@/lib/utils";
 import type { Creator } from "@/types/database";
@@ -24,7 +24,6 @@ export function CreatorDirectoryCard({
   index?: number;
 }) {
   const category = creator.categories?.name ?? "Other";
-  const score = viralScore(creator);
   const rotate = index % 2 === 0 ? "-rotate-1" : "rotate-1";
   const href = `/creator/${creator.instagram_username}`;
 
@@ -57,8 +56,8 @@ export function CreatorDirectoryCard({
           <dd className="text-sm text-foreground">{formatCompactCount(creator.profile_clicks)}</dd>
         </div>
         <div>
-          <dt className="text-muted-foreground">Viral</dt>
-          <dd className="text-sm text-foreground">{score}</dd>
+          <dt className="text-muted-foreground">Instagram</dt>
+          <dd className="text-sm text-foreground">{formatCompactCount(creator.instagram_clicks ?? 0)}</dd>
         </div>
         <div>
           <dt className="text-muted-foreground">Engagement</dt>

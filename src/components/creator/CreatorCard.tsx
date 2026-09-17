@@ -5,11 +5,13 @@ import { CreatorAvatar } from "@/components/creator/CreatorAvatar";
 import { HypeButton } from "@/components/creator/HypeButton";
 import { formatCompactCount } from "@/lib/creator-stats";
 import { displayRank, totalEngagement } from "@/lib/creator-engagement";
+import { displayRankingScore } from "@/lib/arena/ranking";
 import type { Creator } from "@/types/database";
 
 export function CreatorCard({ creator }: { creator: Creator; index?: number }) {
   const category = creator.categories?.name ?? "Other";
   const bid = Number(creator.current_highest_bid) || 0;
+  const score = displayRankingScore(creator);
   const rankLabel = displayRank(creator.current_rank) ?? "New";
 
   return (
@@ -49,7 +51,7 @@ export function CreatorCard({ creator }: { creator: Creator; index?: number }) {
       </dl>
 
       <p className="mt-3 text-center text-sm text-muted-foreground">
-        Ranking bid {formatCompactCount(bid)}
+        Score ₹{score.toLocaleString("en-IN")} · bid ₹{bid.toLocaleString("en-IN")}
       </p>
 
       <div className="mt-4 flex flex-col gap-2">
@@ -63,7 +65,11 @@ export function CreatorCard({ creator }: { creator: Creator; index?: number }) {
         <BidButton
           creatorId={creator.id}
           creatorName={creator.name}
+          instagramUsername={creator.instagram_username}
           currentHighestBid={bid}
+          totalHypeAmount={Number(creator.total_hype_amount || 0)}
+          rivalCombinedScore={creator.rival_combined_score}
+          targetRank={creator.target_rank}
           rank={creator.current_rank}
         />
         <Link

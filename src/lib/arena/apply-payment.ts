@@ -1,9 +1,24 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { revalidateTag } from "next/cache";
 import { lookupInstagramProfile } from "@/lib/instagram/fetch-profile";
 import { instagramProfileUrl } from "@/lib/instagram/username";
 import { getCategoryTopBid, getCreatorVerifiedBid, requiredRankBid } from "@/lib/arena/bids";
+import { redeemCouponAfterPayment } from "@/lib/arena/coupons";
 import { createEditToken } from "@/lib/arena/tokens";
+import { MIN_RANKING_BID } from "@/lib/ranking";
 import { sendManageReceipt } from "@/lib/arena/email";
+
+async function afterVerifiedScoreChange(admin: SupabaseClient) {
+  const { error } = await admin.rpc("sync_live_battle");
+  if (error) {
+    console.error("[arena/webhook] battle history sync failed", error.message);
+  }
+  try {
+    revalidateTag("listings", "max");
+  } catch (error) {
+    console.error("[arena/webhook] listing cache revalidate failed", error);
+  }
+}
 
 type PaymentRow = {
   id: string;
@@ -11,6 +26,9 @@ type PaymentRow = {
   type: "rank_bid" | "hype";
   amount: number;
   amount_inr: number;
+  bid_amount: number | null;
+  amount_charged: number | null;
+  coupon_id: string | null;
   razorpay_order_id: string;
   razorpay_payment_id: string | null;
   status: string;
@@ -20,6 +38,10 @@ type PaymentRow = {
   edit_token: string | null;
   coupon_code: string | null;
 };
+
+function statedBid(pending: PaymentRow) {
+  return Math.round(Number(pending.bid_amount || pending.amount_inr || 0));
+}
 
 type RazorpayEntity = {
   id: string;
@@ -46,7 +68,7 @@ export async function applyArenaPayment(
   const { data: row } = await admin
     .from("payments")
     .select(
-      "id, creator_id, type, amount, amount_inr, razorpay_order_id, razorpay_payment_id, status, instagram_handle, category_id, required_amount_inr, edit_token, coupon_code",
+      "id, creator_id, type, amount, amount_inr, bid_amount, amount_charged, coupon_id, razorpay_order_id, razorpay_payment_id, status, instagram_handle, category_id, required_amount_inr, edit_token, coupon_code",
     )
     .eq("razorpay_order_id", payment.order_id)
     .maybeSingle();
@@ -75,7 +97,7 @@ export async function applyArenaPayment(
 
   const { data: existing } = await admin
     .from("creators")
-    .select("id, category_id, hype_count, total_hype_amount, edit_token")
+    .select("id, category_id, edit_token")
     .eq("instagram_username", handle)
     .maybeSingle();
 
@@ -112,8 +134,6 @@ export async function applyArenaPayment(
         ...creatorFields,
         contact_email: payerEmail || "receipt@viralrank.buzz",
         user_id: null,
-        current_rank_bid: pending.type === "rank_bid" ? pending.amount_inr : 0,
-        current_highest_bid: pending.type === "rank_bid" ? pending.amount_inr : 0,
       })
       .select("id")
       .single();
@@ -131,56 +151,54 @@ export async function applyArenaPayment(
       await getCategoryTopBid(admin, { categoryId: pending.category_id }),
     );
     const stillRequired = requiredRankBid(otherMax);
+    const bid = statedBid(pending);
     if (otherMax <= 0) {
-      tookRank = pending.amount_inr >= 199;
-    } else if (pending.amount_inr < stillRequired) {
+      tookRank = bid >= MIN_RANKING_BID;
+    } else if (bid < stillRequired) {
       // Another verified bid landed first — keep the money, do not award #1.
-      tookRank = pending.amount_inr > otherMax;
+      tookRank = bid > otherMax;
     } else {
-      tookRank = pending.amount_inr > otherMax;
+      tookRank = bid > otherMax;
     }
   }
 
-  if (pending.type === "hype") {
-    await admin
-      .from("creators")
-      .update({
-        hype_count: Number(existing?.hype_count || 0) + 1,
-        total_hype_amount: Number(existing?.total_hype_amount || 0) + pending.amount_inr,
-      })
-      .eq("id", creatorId);
-  }
+  const { data: finalized, error: finError } = await admin.rpc("finalize_combined_score_payment", {
+    p_payment_id: pending.id,
+    p_razorpay_payment_id: payment.id,
+    p_creator_id: creatorId,
+    p_payer_email: payerEmail,
+    p_payer_phone: payerPhone,
+    p_edit_token: editToken,
+    p_took_rank: tookRank,
+    p_payload: payload,
+  });
 
-  const { error: payError } = await admin
-    .from("payments")
-    .update({
-      status: "verified",
-      razorpay_payment_id: payment.id,
-      creator_id: creatorId,
-      payer_email: payerEmail,
-      payer_phone: payerPhone,
-      edit_token: editToken,
-      took_rank: tookRank,
-      webhook_payload: payload,
-    })
-    .eq("id", pending.id)
-    .eq("status", "pending");
-
-  if (payError) {
-    const { data: raced } = await admin
-      .from("payments")
-      .select("status")
-      .eq("razorpay_payment_id", payment.id)
-      .maybeSingle();
-    if (raced?.status === "verified") return { ok: true, duplicate: true };
-    console.error("[arena/webhook] payment update failed", payError.message);
+  if (finError) {
+    console.error("[arena/webhook] finalize failed", finError.message);
     return { ok: false, error: "Could not verify payment." };
   }
 
-  const { error: rpcError } = await admin.rpc("recompute_pay_to_rank");
-  if (rpcError) {
-    console.error("[arena/webhook] recompute failed", rpcError.message);
+  const fin = (finalized ?? {}) as {
+    ok?: boolean;
+    duplicate?: boolean;
+    error?: string;
+    score_applied?: boolean;
+  };
+  if (fin.duplicate) {
+    return { ok: true, duplicate: true };
   }
+  if (fin.ok === false) {
+    return { ok: false, error: fin.error || "Could not verify payment." };
+  }
+
+  await redeemCouponAfterPayment(
+    admin,
+    pending.id,
+    pending.type,
+    pending.coupon_id,
+    statedBid(pending),
+    Math.round(Number(pending.amount_charged || pending.amount_inr || 0)),
+  );
 
   if (payerEmail) {
     await sendManageReceipt({
@@ -188,10 +206,12 @@ export async function applyArenaPayment(
       handle,
       token: editToken,
       type: pending.type,
-      amountInr: pending.amount_inr,
+      amountInr: Math.round(Number(pending.amount_charged || pending.amount_inr || 0)),
+      bidAmount: statedBid(pending),
       tookRank,
     });
   }
 
+  await afterVerifiedScoreChange(admin);
   return { ok: true, tookRank: tookRank ?? undefined };
 }

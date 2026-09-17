@@ -26,10 +26,11 @@ export default function TermsPage() {
         </p>
         <h2 className="text-lg font-extrabold text-foreground">2. Rankings</h2>
         <p>
-          Creator rankings on {PLATFORM_NAME} are ordered by the highest verified rank-bid payment in
-          the selected category and time window. A verified payment does not guarantee that you will
-          hold #1 if another verified bid is higher, including when two overtake attempts complete
-          close together.
+          Creator rankings on {PLATFORM_NAME} are ordered by combined score: the creator&apos;s highest
+          verified rank-bid amount plus their total verified hype. Hype adds directly to a
+          creator&apos;s score. Ranking bids and hype both count toward rank. If two creators have the
+          same combined score, whichever reached that score first holds the higher position. A verified
+          payment does not guarantee #1 if another creator&apos;s score is higher.
         </p>
         <h2 className="text-lg font-extrabold text-foreground">3. Premium digital services</h2>
         <p>
@@ -41,8 +42,8 @@ export default function TermsPage() {
         <p>
           Rank bids and hype payments are <strong>non-refundable</strong> regardless of final rank,
           including when another payment lands first and your bid is no longer enough to take #1.
-          Hype never changes rank. There is no account; a payer may later open a magic manage link
-          emailed with their receipt.
+          Hype adds directly to a creator&apos;s score. Ranking bids and hype both count toward rank.
+          There is no account; a payer may later open a magic manage link emailed with their receipt.
         </p>
         <h2 className="text-lg font-extrabold text-foreground">5. Profile review</h2>
         <p>

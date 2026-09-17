@@ -17,7 +17,7 @@ export function HomeRankList({ items }: { items: RankedCreator[] }) {
   return (
     <ol className="space-y-4" data-analytics="home_rank_list">
       {items.map((creator, index) => {
-        const rank = index + 1;
+        const rank = creator.current_rank ?? index + 1;
         const clicks = Number(creator.instagram_clicks ?? creator.profile_clicks ?? 0);
         const category = creator.categories;
         return (
@@ -28,7 +28,9 @@ export function HomeRankList({ items }: { items: RankedCreator[] }) {
             <span className="w-14 shrink-0 text-3xl font-extrabold text-hot-pink">#{rank}</span>
             <SmartImage
               src={creator.profile_image_url || "/viralrank-logo.jpg"}
+              alt=""
               size="md"
+              priority={index < 3}
               className="size-16 rounded-xl border-[3px] border-border"
             />
             <div className="min-w-0 flex-1">

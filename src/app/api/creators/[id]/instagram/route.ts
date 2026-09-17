@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { clickCookieName, hasRecentClickCookie, incrementCreatorClick } from "@/lib/arena/clicks";
+import { recordVisit } from "@/lib/arena/visits";
 import { isPublicCreator } from "@/lib/creators/public";
 import { isAllowedInstagramUrl } from "@/lib/security";
 import { clientKey, rateLimit } from "@/lib/rate-limit";
@@ -38,6 +39,10 @@ export async function GET(request: Request, { params }: Params) {
 
   const already = hasRecentClickCookie(request, creatorId);
   const result = await incrementCreatorClick(admin, creatorId, already);
+  const session = request.headers.get("cookie")?.match(/(?:^|; )vr_session=([^;]+)/)?.[1];
+  if (session) {
+    await recordVisit(admin, session, `/api/creators/${creatorId}/instagram`);
+  }
   const res = NextResponse.redirect(creator.instagram_url);
   if (result.counted && result.maxAge) {
     res.cookies.set(clickCookieName(creatorId), "1", {

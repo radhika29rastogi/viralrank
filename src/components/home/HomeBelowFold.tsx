@@ -9,14 +9,12 @@ import {
   cachedArenaFeed,
   cachedCategories,
   cachedCreators,
-  cachedLiveBattle,
-  cachedTopTwo,
+  cachedHomeBattleContext,
 } from "@/lib/listing-cache";
 
 export async function HomeBelowFold() {
-  const [top, battle, activity, categories, listed] = await Promise.all([
-    cachedTopTwo(),
-    cachedLiveBattle(),
+  const [battleContext, activity, categories, listed] = await Promise.all([
+    cachedHomeBattleContext(),
     cachedArenaFeed(24),
     cachedCategories().then((r) => r.items),
     cachedCreators({ sort: "trending", limit: 12 }),
@@ -28,7 +26,11 @@ export async function HomeBelowFold() {
       <div className="mx-auto max-w-6xl space-y-16 px-4 py-16">
         <HowItWorks />
         <HomeCreatorsSection creators={listed.items} />
-        <HomeLiveBattles battle={battle} leaders={top} />
+        <HomeLiveBattles
+          leaders={battleContext.leaders}
+          yesterday={battleContext.yesterday}
+          todayFinal={battleContext.todayFinal}
+        />
         <FlavorGrid categories={categories} />
         <FaqSection />
         <ClosingCta />

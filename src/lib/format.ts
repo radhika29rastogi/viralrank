@@ -45,7 +45,8 @@ export function instagramUrlFromUsername(username: string) {
 }
 
 export function siteUrl() {
-  return process.env.NEXT_PUBLIC_SITE_URL || "https://viralrank.buzz";
+  const raw = process.env.NEXT_PUBLIC_SITE_URL || "https://viralrank.buzz";
+  return raw.replace(/\/+$/, "");
 }
 
 export function timeAgo(iso: string) {

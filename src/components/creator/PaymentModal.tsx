@@ -1,37 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { AmountInput, amountIsValid } from "@/components/payments/AmountInput";
+import { CouponField, type AppliedCoupon } from "@/components/payments/CouponField";
 import { openRazorpayCheckout } from "@/lib/razorpay/checkout-client";
 import { RAZORPAY_CHECKOUT_THEME } from "@/lib/design";
-import { HYPE_PRESETS, minOvertakeAmount, validateHypeAmount, validateRankingBid } from "@/lib/ranking";
+import {
+  HYPE_RANK_COPY,
+  MIN_HYPE,
+  bidNeededForRank,
+  minOvertakeAmount,
+  validateHypeAmount,
+  validateRankingBid,
+} from "@/lib/ranking";
 import type { PaymentKind } from "@/types/database";
-
-function loadRazorpay() {
-  return new Promise<void>((resolve, reject) => {
-    if (window.Razorpay) {
-      resolve();
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("checkout"));
-    document.body.appendChild(script);
-  });
-}
 
 export function PaymentModal({
   open,
   onOpenChange,
   kind,
-  creatorId,
   creatorName,
   instagramHandle,
   currentHighestBid,
+  totalHypeAmount = 0,
+  rivalCombinedScore,
+  targetRank,
+  suggestedAmount,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -40,138 +36,94 @@ export function PaymentModal({
   creatorName: string;
   instagramHandle?: string;
   currentHighestBid: number;
+  totalHypeAmount?: number;
+  rivalCombinedScore?: number | null;
+  targetRank?: number | null;
+  suggestedAmount?: number;
 }) {
-  const minBid = minOvertakeAmount(currentHighestBid);
-  const [amount, setAmount] = useState(kind === "hype" ? 49 : minBid);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const isBid = kind === "ranking_bid";
+  const minAmount = isBid ? minOvertakeAmount(currentHighestBid) : MIN_HYPE;
+  const takeRank = targetRank && targetRank > 0 ? targetRank : 1;
+  const rival = Number(rivalCombinedScore ?? currentHighestBid + totalHypeAmount);
+  const beat = isBid
+    ? (suggestedAmount ?? bidNeededForRank(currentHighestBid, totalHypeAmount, rival))
+    : minAmount;
+  const [amount, setAmount] = useState<number | "">(beat);
+  const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
   const [error, setError] = useState("");
   const [status, setStatus] = useState<"idle" | "paying" | "verifying" | "done">("idle");
 
+  useEffect(() => {
+    if (open) {
+      setAmount(beat);
+      setCoupon(null);
+      setError("");
+      setStatus("idle");
+    }
+  }, [open, beat]);
+
+  const valid = amountIsValid(amount, minAmount);
+  const typed = typeof amount === "number" ? amount : beat;
+  const charge = coupon && coupon.amountBefore === typed ? coupon.amountAfter : typed;
+
   async function pay() {
     setError("");
-    const check =
-      kind === "ranking_bid"
-        ? validateRankingBid(amount, currentHighestBid)
-        : validateHypeAmount(amount);
-    if (!check.ok) {
-      setError(check.message);
+    if (!instagramHandle) {
+      setError("Missing Instagram handle.");
       return;
     }
-    if (!(kind === "hype" && instagramHandle) && (!name.trim() || !email.trim())) {
-      setError("Name and email are required so we can record this payment.");
+    const check = isBid ? validateRankingBid(typed, currentHighestBid) : validateHypeAmount(typed);
+    if (!check.ok) {
+      setError(check.message);
       return;
     }
 
     setStatus("paying");
     try {
-      if (kind === "hype" && instagramHandle) {
-        const res = await fetch("/api/orders", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            instagram_handle: instagramHandle,
-            type: "hype",
-            amount,
-          }),
-        });
-        const json = (await res.json()) as {
-          error?: string;
-          order_id?: string;
-          key?: string;
-          amount?: number;
-        };
-        if (!res.ok || !json.order_id || !json.key) {
-          setError(json.error ?? "Payment could not be completed. Please try again.");
-          setStatus("idle");
-          return;
-        }
-        await openRazorpayCheckout({
-          key: json.key,
-          amount: json.amount ?? amount * 100,
-          currency: "INR",
-          order_id: json.order_id,
-          name: "ViralRank.buzz",
-          description: `Hype ${creatorName}`,
-          theme: { color: RAZORPAY_CHECKOUT_THEME },
-          prefill: {},
-          onSuccess: async () => {
-            setStatus("verifying");
-            const started = Date.now();
-            while (Date.now() - started < 20000) {
-              const statusRes = await fetch(`/api/payments/${json.order_id}/status`);
-              const body = (await statusRes.json()) as { status?: string };
-              if (body.status === "verified") {
-                setStatus("done");
-                window.location.reload();
-                return;
-              }
-              if (body.status === "failed") {
-                setError("Payment could not be completed. Please try again.");
-                setStatus("idle");
-                return;
-              }
-              await new Promise((r) => setTimeout(r, 1200));
-            }
-            setError("We couldn't verify this payment. Your ranking has not been updated.");
-            setStatus("idle");
-          },
-          onDismiss: () => setStatus("idle"),
-          onFailed: (message) => {
-            setError(message);
-            setStatus("idle");
-          },
-        });
-        return;
-      }
-
-      const res = await fetch("/api/payments/order", {
+      const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          kind,
-          creatorId,
-          amount,
-          supporterName: name,
-          supporterEmail: email,
+          instagram_handle: instagramHandle,
+          type: isBid ? "rank_bid" : "hype",
+          amount: typed,
+          coupon_code: isBid ? coupon?.code : undefined,
         }),
       });
-      const json = (await res.json()) as { error?: string; orderId?: string; key?: string; amount?: number; pendingId?: string };
-      if (!res.ok || !json.orderId || !json.key) {
+      const json = (await res.json()) as {
+        error?: string;
+        order_id?: string;
+        key?: string;
+        amount?: number;
+        amount_charged?: number;
+      };
+      if (!res.ok || !json.order_id || !json.key) {
         setError(json.error ?? "Payment could not be completed. Please try again.");
         setStatus("idle");
         return;
       }
-
-      await loadRazorpay();
-      const rzp = new window.Razorpay({
+      await openRazorpayCheckout({
         key: json.key,
-        amount: json.amount ?? amount * 100,
+        amount: json.amount ?? charge * 100,
         currency: "INR",
+        order_id: json.order_id,
         name: "ViralRank.buzz",
-        description: kind === "hype" ? `Hype ${creatorName}` : `Rank ${creatorName}`,
-        order_id: json.orderId,
-        prefill: { name, email },
-        theme: { color: kind === "hype" ? "#FF2D95" : "#F5C518" },
-        handler: async () => {
+        description: isBid ? `Rank bid ${creatorName}` : `Hype ${creatorName}`,
+        theme: { color: RAZORPAY_CHECKOUT_THEME },
+        prefill: {},
+        onSuccess: async () => {
           setStatus("verifying");
           const started = Date.now();
           while (Date.now() - started < 20000) {
-            const statusRes = await fetch(
-              `/api/payments/status?pendingId=${json.pendingId}&kind=${kind}`,
-            );
+            const statusRes = await fetch(`/api/payments/${json.order_id}/status`);
             const body = (await statusRes.json()) as { status?: string };
             if (body.status === "verified") {
               setStatus("done");
               window.location.reload();
               return;
             }
-            if (body.status === "not_applied" || body.status === "failed") {
-              setError(
-                body.status === "not_applied"
-                  ? "We couldn't verify this payment. Your ranking has not been updated."
-                  : "Payment could not be completed. Please try again.",
-              );
+            if (body.status === "failed") {
+              setError("Payment could not be completed. Please try again.");
               setStatus("idle");
               return;
             }
@@ -180,71 +132,51 @@ export function PaymentModal({
           setError("We couldn't verify this payment. Your ranking has not been updated.");
           setStatus("idle");
         },
-        modal: {
-          ondismiss: () => setStatus("idle"),
+        onDismiss: () => setStatus("idle"),
+        onFailed: (message) => {
+          setError(message);
+          setStatus("idle");
         },
       });
-      rzp.open();
     } catch {
       setError("Payment could not be completed. Please try again.");
       setStatus("idle");
     }
   }
 
-  const isBid = kind === "ranking_bid";
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] w-[calc(100%-1.5rem)] overflow-y-auto border-4 border-ink bg-cream sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] w-[calc(100%-1.5rem)] overflow-y-auto border-4 border-border bg-cream sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="font-display text-2xl">
-            {isBid ? `🏆 Beat ₹${minBid}` : "🔥 Hype this creator"}
+            {isBid ? `🏆 Beat ₹${beat.toLocaleString("en-IN")} to take #${takeRank}` : "🔥 Hype this creator"}
           </DialogTitle>
           <DialogDescription>
             {isBid
-              ? `Pay to take the rank. Minimum to overtake is ₹${minBid}. Rank only updates after webhook verification.`
-              : "Hype never changes rank — it is separate community support from ₹49."}
+              ? `Minimum next bid: ₹${minAmount.toLocaleString("en-IN")}. To reach #${takeRank}, you need a combined score above ₹${rival.toLocaleString("en-IN")}. Rank only updates after webhook verification.`
+              : HYPE_RANK_COPY}
           </DialogDescription>
         </DialogHeader>
-        {isBid ? null : (
-          <div className="flex flex-wrap gap-2">
-            {HYPE_PRESETS.map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                className={`rounded-full border-2 border-ink px-3 py-1 text-sm font-black ${amount === preset ? "bg-hot-pink text-on-accent" : "bg-lime text-on-accent"}`}
-                onClick={() => setAmount(preset)}
-              >
-                ₹{preset.toLocaleString("en-IN")}
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="grid gap-3">
-          <div>
-            <Label htmlFor="amount">Amount (₹)</Label>
-            <Input
-              id="amount"
-              type="number"
-              min={isBid ? minBid : 49}
-              value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
-            />
-          </div>
-          {kind === "hype" && instagramHandle ? null : (
-            <>
-              <div>
-                <Label htmlFor="supporter-name">Your name</Label>
-                <Input id="supporter-name" value={name} onChange={(e) => setName(e.target.value)} />
-              </div>
-              <div>
-                <Label htmlFor="supporter-email">Email</Label>
-                <Input id="supporter-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-              </div>
-            </>
-          )}
-        </div>
-        {error ? <p className="text-sm font-bold text-rose-700">{error}</p> : null}
+        <AmountInput
+          minAmount={minAmount}
+          suggestedAmount={beat}
+          value={amount}
+          onChange={(next) => {
+            setAmount(next);
+            setCoupon(null);
+          }}
+        />
+        {valid && isBid ? (
+          <CouponField
+            amount={typed}
+            applied={coupon}
+            onApplied={setCoupon}
+            onCleared={() => setCoupon(null)}
+            disabled={status === "paying" || status === "verifying"}
+            paymentType="rank_bid"
+          />
+        ) : null}
+        {error ? <p className="text-sm font-bold text-red-600">{error}</p> : null}
         {status === "verifying" ? (
           <p className="text-sm font-bold">Verifying… rank updates only after payment confirmation.</p>
         ) : null}
@@ -252,10 +184,10 @@ export function PaymentModal({
           variant={isBid ? "bid" : "hype"}
           size="lg"
           className="w-full"
-          disabled={status === "paying" || status === "verifying"}
-          onClick={pay}
+          disabled={!valid || status === "paying" || status === "verifying"}
+          onClick={() => void pay()}
         >
-          {isBid ? "Pay ranking bid" : "Send hype"}
+          Pay ₹{charge.toLocaleString("en-IN")} · no account needed
         </Button>
       </DialogContent>
     </Dialog>

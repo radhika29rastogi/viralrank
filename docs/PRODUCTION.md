@@ -20,6 +20,7 @@ Add these in **Vercel → Project → Settings → Environment Variables** for *
 | `RAPIDAPI_HOST` | Yes (lookup) | Public host string | Vercel + local `.env.local` | `instagram-looter2.p.rapidapi.com` |
 | `RESEND_API_KEY` | No | **Secret** | Vercel + local `.env.local` | Receipt + `/manage/{token}` email |
 | `ADMIN_SECRET` | No | **Secret** | Vercel + local `.env.local` | `/admin?key=` only — no login |
+| `CRON_SECRET` | Yes (daily battle) | **Secret** | Vercel | Bearer for `/api/cron/daily-battle` (20:00 IST) |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | No | Public | Leave empty for launch | Only if a Turnstile widget is on `/submit` |
 | `TURNSTILE_SECRET_KEY` | No | **Secret** | Leave empty for launch | Only with the site key + widget |
 
@@ -37,12 +38,16 @@ Product flows do **not** use Supabase Auth. Leave email signup disabled if you a
 
 1. `supabase/migrations/0001_init.sql`
 2. `supabase/migrations/0002_flavor_categories.sql`
+3. `supabase/migrations/0013_category_niches.sql` (icon column + niches)
 3. `supabase/migrations/0003_listing_payment.sql`
 4. `supabase/migrations/0006_platform_upgrade.sql`
 5. `supabase/migrations/0007_security_hardening.sql`
 6. `supabase/migrations/0008_hide_payment_pii.sql` (**new — required before launch**)
 7. `supabase/migrations/0010_no_auth_pay_to_rank.sql` (**required** before deploying the no-auth submit/homepage)
-8. Only if you previously applied a review-queue migration: `0005_restore_listing_auto_publish.sql`
+8. `supabase/migrations/0011_v3_ranking_coupons_battle.sql` (**required** for ranking_score, coupons, daily battle)
+9. `supabase/migrations/0012_combined_score_live_rank.sql` (**required** for generated `combined_score`, `score_reached_at`, live `creator_live_ranks`, and atomic bid/hype score writes)
+10. `supabase/migrations/0014_live_battle_pairing.sql` (**required** so `sync_live_battle()` logs pairing from live RANK(), not stored `current_rank`)
+11. Only if you previously applied a review-queue migration: `0005_restore_listing_auto_publish.sql`
 
 Do **not** run `supabase/seed/demo-creators.sql` on production unless you intentionally want demo listings.
 
@@ -104,7 +109,7 @@ Then smoke-test:
 - `https://www.viralrank.buzz/submit`
 - `https://www.viralrank.buzz/stats`
 - `https://www.viralrank.buzz/rules`
-- `https://www.viralrank.buzz/api/categories` → 20 `{id,name,slug}` objects
+- `https://www.viralrank.buzz/api/categories` → `{id,name,slug,icon}` objects (32 catalog rows after 0013)
 - `https://www.viralrank.buzz/api/creators/status` → `{ configured, canSubmitCreators, listingPaymentSchemaReady, categoriesReady, categoryCount }` only (no key formats)
 
 ## 6. Creator visibility (homepage / explore / rankings)

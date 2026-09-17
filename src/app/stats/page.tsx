@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { ColorBlock, DisplayHeadline } from "@/components/system";
 import { formatNumber } from "@/lib/format";
-import { getPublicStats } from "@/lib/queries";
+import { cachedPublicStats } from "@/lib/listing-cache";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Stats",
@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 export default async function StatsPage() {
-  const stats = await getPublicStats();
+  const stats = await cachedPublicStats();
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 px-4 py-12">

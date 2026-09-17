@@ -6,13 +6,15 @@ import { CreatorAvatar } from "@/components/creator/CreatorAvatar";
 import { HypeButton } from "@/components/creator/HypeButton";
 import { CountUp } from "@/components/creator/CountUp";
 import { TrackProfileClick } from "@/components/creator/TrackProfileClick";
+import { JsonLd } from "@/components/seo/JsonLd";
 import { displayRank, totalEngagement } from "@/lib/creator-engagement";
 import { formatCompactCount } from "@/lib/creator-stats";
-import { minOvertakeAmount } from "@/lib/ranking";
+import { displayRankingScore } from "@/lib/arena/ranking";
+import { HYPE_RANK_COPY, bidNeededForRank, minOvertakeAmount } from "@/lib/ranking";
 import { formatNumber, siteUrl } from "@/lib/format";
 import { getCreatorByUsername } from "@/lib/queries";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 type Props = { params: Promise<{ username: string }> };
 
@@ -23,12 +25,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: `@${username}`,
     description: creator
-      ? `${creator.name} on ViralRank.buzz — rank, hype, and community support.`
+      ? `${creator.name} (@${username}) on ViralRank.buzz — combined score ₹${Number(creator.combined_score || creator.ranking_score || creator.current_highest_bid || 0).toLocaleString("en-IN")}. Ranking bids and hype both count toward rank.`
       : `Creator @${username} on ViralRank.buzz`,
     openGraph: {
       title,
+      description: creator
+        ? `${creator.name} on ViralRank.buzz`
+        : `Creator @${username} on ViralRank.buzz`,
       images: creator?.profile_image_url ? [{ url: creator.profile_image_url }] : undefined,
       url: `${siteUrl()}/creator/${username}`,
+      type: "profile",
     },
   };
 }
@@ -39,12 +45,32 @@ export default async function CreatorPage({ params }: Props) {
   if (!creator) notFound();
 
   const bid = Number(creator.current_highest_bid) || 0;
-  const beat = minOvertakeAmount(bid);
+  const hypeAmount = Number(creator.total_hype_amount || 0);
+  const score = displayRankingScore(creator);
+  const minNext = minOvertakeAmount(bid);
+  const takeRank = creator.target_rank && creator.target_rank > 0 ? creator.target_rank : 1;
+  const rival = Number(creator.rival_combined_score ?? score);
+  const beat = bidNeededForRank(bid, hypeAmount, rival);
   const metricsLabel =
     creator.instagram_data_source === "instagram" ? "Instagram data" : "Creator-provided data";
+  const origin = siteUrl();
 
   return (
     <div className="mx-auto max-w-4xl space-y-8 px-4 py-12">
+      <JsonLd
+        data={{
+          "@context": "https://schema.org",
+          "@type": "ProfilePage",
+          mainEntity: {
+            "@type": "Person",
+            name: creator.name,
+            alternateName: `@${creator.instagram_username}`,
+            image: creator.profile_image_url || undefined,
+            url: `${origin}/creator/${creator.instagram_username}`,
+            description: creator.bio || `${creator.name} on ViralRank.buzz`,
+          },
+        }}
+      />
       <TrackProfileClick creatorId={creator.id} />
       <ColorBlock color="cream" padding="lg">
         <Badge color="yellow" float="tl" rotate={-2}>
@@ -100,8 +126,9 @@ export default async function CreatorPage({ params }: Props) {
         <p className="text-sm font-extrabold uppercase text-foreground">Total engagement</p>
         <p className="mt-1 text-2xl font-extrabold">{formatCompactCount(totalEngagement(creator))}</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Rank is calculated server-side from hype and engagement. Ranking bid:{" "}
-          <CountUp value={bid} /> · Beat ₹{beat.toLocaleString("en-IN")} to raise bid rank weight.
+          {HYPE_RANK_COPY} Combined score <CountUp value={score} />. Minimum next bid: ₹
+          {minNext.toLocaleString("en-IN")}. To reach #{takeRank}, you need a combined score above ₹
+          {rival.toLocaleString("en-IN")}. Beat ₹{beat.toLocaleString("en-IN")} to take #{takeRank}.
         </p>
       </ColorBlock>
 
@@ -116,7 +143,11 @@ export default async function CreatorPage({ params }: Props) {
         <BidButton
           creatorId={creator.id}
           creatorName={creator.name}
+          instagramUsername={creator.instagram_username}
           currentHighestBid={bid}
+          totalHypeAmount={hypeAmount}
+          rivalCombinedScore={rival}
+          targetRank={takeRank}
           rank={creator.current_rank}
         />
       </div>

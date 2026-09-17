@@ -3,6 +3,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
+import { categoryIcon } from "@/lib/categories";
 import type { Category } from "@/types/database";
 
 type Option = { id: string; name: string; slug: string };
@@ -132,7 +133,9 @@ export function CategorySelect({
       ? "Could not load categories"
       : options.length === 0
         ? "No categories available"
-        : (selected?.name ?? "Pick a category");
+        : selected
+          ? `${categoryIcon(selected.slug)} ${selected.name}`
+          : "Pick a category";
 
   const menu =
     open && !loading && !error && options.length > 0 && typeof document !== "undefined"
@@ -169,7 +172,7 @@ export function CategorySelect({
                     pick(c);
                   }}
                 >
-                  {c.name}
+                  {categoryIcon(c.slug)} {c.name}
                 </button>
               </li>
             ))}

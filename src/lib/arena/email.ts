@@ -6,6 +6,7 @@ export async function sendManageReceipt(input: {
   token: string;
   type: "rank_bid" | "hype";
   amountInr: number;
+  bidAmount?: number;
   tookRank: boolean | null;
 }) {
   const key = process.env.RESEND_API_KEY?.trim();
@@ -13,14 +14,14 @@ export async function sendManageReceipt(input: {
   const manageUrl = `${siteUrl()}/manage/${input.token}`;
   const subject =
     input.type === "rank_bid"
-      ? `ViralRank receipt — @${input.handle} rank bid ₹${input.amountInr}`
-      : `ViralRank receipt — @${input.handle} hype ₹${input.amountInr}`;
+      ? `ViralRank receipt — @${input.handle} rank bid ₹${input.bidAmount ?? input.amountInr}`
+      : `ViralRank receipt — @${input.handle} hype ₹${input.bidAmount ?? input.amountInr}`;
   const rankNote =
     input.type === "rank_bid"
       ? input.tookRank
         ? "This bid currently holds the rank."
         : "This payment is verified. Rank bids are non-refundable even if another bid landed first or this amount is no longer enough for #1."
-      : "Hype is a support counter and never changes rank.";
+      : "Hype adds directly to this creator's score. Ranking bids and hype both count toward rank.";
 
   if (!key) {
     console.info("[arena/email] skipped (RESEND_API_KEY unset)", { handle: input.handle });
@@ -40,9 +41,14 @@ export async function sendManageReceipt(input: {
         subject,
         text: [
           `Thanks for paying ₹${input.amountInr} on ViralRank for @${input.handle}.`,
+          input.bidAmount && input.bidAmount !== input.amountInr
+            ? `Ranked amount ₹${input.bidAmount}. Charged ₹${input.amountInr}.`
+            : "",
           rankNote,
           `Manage this listing (unguessable link — do not share): ${manageUrl}`,
-        ].join("\n\n"),
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
       }),
     });
     if (!res.ok) {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { MIN_HYPE_AMOUNT } from "@/lib/ranking";
 
 /**
  * Free hype is disabled. Hype must go through Razorpay via POST /api/payments/order
@@ -7,7 +8,7 @@ import { NextResponse } from "next/server";
 export async function POST() {
   return NextResponse.json(
     {
-      error: "Free hype is disabled. Support this creator with a paid hype (₹49+).",
+      error: `Free hype is disabled. Support this creator with a paid hype (₹${MIN_HYPE_AMOUNT.toLocaleString("en-IN")}+).`,
       code: "paid_hype_only",
     },
     { status: 403 },

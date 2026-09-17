@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import { BoldButton, ColorBlock, DisplayHeadline } from "@/components/system";
+import { MIN_HYPE_AMOUNT, MIN_RANKING_BID } from "@/lib/ranking";
+
+const bid = MIN_RANKING_BID.toLocaleString("en-IN");
+const hype = MIN_HYPE_AMOUNT.toLocaleString("en-IN");
 
 export const metadata: Metadata = {
   title: "Pricing",
-  description: "Hype from ₹49. Ranking bids from ₹199.",
+  description: `Hype from ₹${hype}. Ranking bids from ₹${bid}.`,
 };
 
 export default function PricingPage() {
@@ -15,9 +19,10 @@ export default function PricingPage() {
       <div className="grid gap-8 md:grid-cols-2">
         <ColorBlock color="pink" padding="lg">
           <p className="text-sm font-extrabold uppercase">Casual support</p>
-          <h2 className="mt-2 text-4xl font-extrabold text-on-accent">HYPE — ₹49+</h2>
+          <h2 className="mt-2 text-4xl font-extrabold text-on-accent">HYPE — ₹{hype}+</h2>
           <p className="mt-3 text-on-accent/80">
-            Support a creator. Unlimited uses. No rank impact, even at ₹10,000.
+            Support a creator from ₹{hype}, unlimited times. Hype adds directly to a creator&apos;s score.
+            Ranking bids and hype both count toward rank.
           </p>
           <div className="mt-6">
             <BoldButton href="/explore" color="yellow" size="lg">
@@ -27,9 +32,10 @@ export default function PricingPage() {
         </ColorBlock>
         <ColorBlock color="yellow" padding="lg">
           <p className="text-sm font-extrabold uppercase">Take the rank</p>
-          <h2 className="mt-2 text-4xl font-extrabold text-on-accent">RANKING BID — ₹199+</h2>
+          <h2 className="mt-2 text-4xl font-extrabold text-on-accent">RANKING BID — ₹{bid}+</h2>
           <p className="mt-3 text-on-accent/80">
-            First bid ₹199. To overtake, pay current highest bid + ₹100. Highest verified payment holds #1.
+            First bid ₹{bid}. Every new bid must be at least the current highest bid + ₹100. Combined
+            score is highest bid + verified hype — that is what decides rank.
           </p>
           <div className="mt-6">
             <BoldButton href="/submit" color="pink" size="lg">

@@ -9,6 +9,9 @@ export type ListedCreatorRow = {
   followers: number | null;
   bio: string | null;
   stats_fetched_at: string | null;
+  current_highest_bid: number | null;
+  total_hype_amount: number | null;
+  combined_score: number | null;
 };
 
 export async function getListedCreator(handle: string): Promise<ListedCreatorRow | null> {
@@ -16,7 +19,7 @@ export async function getListedCreator(handle: string): Promise<ListedCreatorRow
   if (!admin) return null;
   const { data } = await admin
     .from("creators")
-    .select("id, instagram_username, name, profile_image_url, followers, bio, stats_fetched_at")
+    .select("id, instagram_username, name, profile_image_url, followers, bio, stats_fetched_at, current_highest_bid, total_hype_amount, combined_score")
     .eq("instagram_username", handle)
     .maybeSingle();
   return (data as ListedCreatorRow | null) ?? null;

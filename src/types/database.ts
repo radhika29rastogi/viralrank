@@ -16,6 +16,7 @@ export type Category = {
   id: string;
   name: string;
   slug: string;
+  icon?: string | null;
 };
 
 export type Creator = {
@@ -35,7 +36,14 @@ export type Creator = {
   instagram_data_source: InstagramDataSource;
   current_highest_bid: number;
   current_rank_bid?: number;
+  ranking_score?: number;
+  ranking_score_at?: string | null;
+  combined_score?: number;
+  score_reached_at?: string | null;
+  verified_hype_total?: number;
   current_rank: number | null;
+  target_rank?: number | null;
+  rival_combined_score?: number | null;
   rank_set_at: string | null;
   stats_fetched_at?: string | null;
   profile_clicks: number;

@@ -7,12 +7,13 @@ import { ListingFilters } from "@/components/creator/ListingFilters";
 import { Disclaimer } from "@/components/layout/Disclaimer";
 import { ColorBlock, DisplayHeadline } from "@/components/system";
 import { cachedCategories, cachedCreators, cachedRankedCreators } from "@/lib/listing-cache";
+import { displayRankingScore } from "@/lib/arena/ranking";
 
 export const revalidate = 30;
 
 export const metadata: Metadata = {
   title: "Rankings",
-  description: "Highest verified ranking bids on ViralRank.buzz.",
+  description: "Highest combined scores on ViralRank.buzz — verified rank bid plus verified hype.",
 };
 
 export default async function RankingsPage({
@@ -58,7 +59,7 @@ export default async function RankingsPage({
         </ColorBlock>
       ) : (
         <>
-          {throne && (throne.current_highest_bid || 0) > 0 ? <ThroneCard creator={throne} /> : null}
+          {throne && displayRankingScore(throne) > 0 ? <ThroneCard creator={throne} /> : null}
           <div className="grid gap-8 sm:grid-cols-2 xl:grid-cols-3">
             {grid.map((creator) => (
               <CreatorCard key={creator.id} creator={creator} />

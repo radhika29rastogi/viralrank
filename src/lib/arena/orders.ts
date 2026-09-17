@@ -3,8 +3,9 @@ import type Razorpay from "razorpay";
 import { lookupInstagramProfile } from "@/lib/instagram/fetch-profile";
 import { parseInstagramProfileInput } from "@/lib/instagram/username";
 import { resolveCategoryId } from "@/lib/supabase/seed-categories";
-import { validateHypeAmount } from "@/lib/ranking";
+import { COUPON_RANK_BID_ONLY, MIN_HYPE_AMOUNT, MIN_RANKING_BID, validateHypeAmount } from "@/lib/ranking";
 import { getCategoryTopBid, getCreatorVerifiedBid, requiredRankBid } from "@/lib/arena/bids";
+import { previewCoupon } from "@/lib/arena/coupons";
 import { inrToPaise } from "@/lib/arena/money";
 import { createEditToken } from "@/lib/arena/tokens";
 
@@ -22,6 +23,9 @@ export type ArenaOrderResult =
       orderId: string;
       amountPaise: number;
       amountInr: number;
+      bidAmount: number;
+      amountCharged: number;
+      discountInr: number;
       currency: "INR";
       key: string;
       requiredAmountInr: number;
@@ -74,19 +78,20 @@ export async function createArenaOrder(
 
   let requiredAmountInr: number;
   if (input.type === "hype") {
-    const check = validateHypeAmount(input.amountInr ?? 49);
+    const check = validateHypeAmount(input.amountInr ?? MIN_HYPE_AMOUNT);
     if (!check.ok) return { ok: false, status: 400, error: check.message };
-    requiredAmountInr = 49;
+    requiredAmountInr = MIN_HYPE_AMOUNT;
   } else {
     const firstBidFloor = requiredRankBid(creatorBid);
     const claimOne = requiredRankBid(categoryTop);
-    requiredAmountInr = existing?.id && creatorBid > 0 ? firstBidFloor : Math.min(firstBidFloor, 199);
+    requiredAmountInr =
+      existing?.id && creatorBid > 0 ? firstBidFloor : Math.min(firstBidFloor, MIN_RANKING_BID);
     if (input.amountInr != null && input.amountInr >= claimOne) {
       requiredAmountInr = claimOne;
     } else if (existing?.id && creatorBid > 0) {
       requiredAmountInr = firstBidFloor;
     } else {
-      requiredAmountInr = 199;
+      requiredAmountInr = MIN_RANKING_BID;
     }
   }
 
@@ -96,37 +101,65 @@ export async function createArenaOrder(
       ok: false,
       status: 400,
       error:
-        requiredAmountInr === 199
-          ? "First rank bid is ₹199."
+        requiredAmountInr === MIN_RANKING_BID
+          ? `First rank bid is ₹${MIN_RANKING_BID.toLocaleString("en-IN")}.`
           : `This bid must be at least ₹${requiredAmountInr} (current highest + ₹100).`,
     };
   }
-  if (input.type === "hype" && amountInr < 49) {
-    return { ok: false, status: 400, error: "Minimum hype amount is ₹49." };
+  if (input.type === "hype" && amountInr < MIN_HYPE_AMOUNT) {
+    return {
+      ok: false,
+      status: 400,
+      error: `Minimum hype amount is ₹${MIN_HYPE_AMOUNT.toLocaleString("en-IN")}.`,
+    };
   }
 
-  const coupon = input.couponCode?.trim().toUpperCase() || null;
+  const bidAmount = amountInr;
+  let amountCharged = bidAmount;
+  let couponId: string | null = null;
+  let couponCode: string | null = null;
+  let discountInr = 0;
+
+  if (input.couponCode?.trim()) {
+    if (input.type !== "rank_bid") {
+      return { ok: false, status: 400, error: COUPON_RANK_BID_ONLY };
+    }
+    const preview = await previewCoupon(admin, input.couponCode, bidAmount, input.type);
+    if (!preview.ok) {
+      return { ok: false, status: 400, error: preview.error };
+    }
+    couponId = preview.coupon.id;
+    couponCode = preview.coupon.code;
+    amountCharged = preview.amountAfter;
+    discountInr = preview.discountApplied;
+  }
+
   const editToken = createEditToken();
 
   try {
     const order = await razorpay.orders.create({
-      amount: inrToPaise(amountInr),
+      amount: inrToPaise(amountCharged),
       currency: "INR",
       notes: {
         kind: "arena_payment",
         type: input.type,
         handle: parsed.username,
+        bid_amount: String(bidAmount),
+        amount_charged: String(amountCharged),
       },
     });
 
     const { error } = await admin.from("payments").insert({
       creator_id: existing?.id ?? null,
       type: input.type,
-      amount: inrToPaise(amountInr),
-      amount_inr: amountInr,
+      amount: inrToPaise(amountCharged),
+      amount_inr: bidAmount,
+      bid_amount: bidAmount,
+      amount_charged: amountCharged,
+      coupon_id: couponId,
       razorpay_order_id: order.id,
       status: "pending",
-      coupon_code: coupon,
+      coupon_code: couponCode,
       edit_token: editToken,
       instagram_handle: parsed.username,
       category_id: creatorCategoryId,
@@ -142,7 +175,10 @@ export async function createArenaOrder(
       ok: true,
       orderId: order.id,
       amountPaise: Number(order.amount),
-      amountInr,
+      amountInr: amountCharged,
+      bidAmount,
+      amountCharged,
+      discountInr,
       currency: "INR",
       key,
       requiredAmountInr,

@@ -1,4 +1,5 @@
 import { Badge, ColorBlock } from "@/components/system";
+import { MIN_HYPE_AMOUNT, MIN_RANKING_BID } from "@/lib/ranking";
 
 const steps = [
   {
@@ -14,15 +15,15 @@ const steps = [
     n: "02",
     icon: "💸",
     title: "Bid or hype",
-    body: "Bid from ₹199, then current + ₹100. Hype from ₹49 without changing rank.",
-    tag: "₹199+",
+    body: `Bid from ₹${MIN_RANKING_BID.toLocaleString("en-IN")}, then current + ₹100. Hype from ₹${MIN_HYPE_AMOUNT.toLocaleString("en-IN")} adds directly to a creator's score. Ranking bids and hype both count toward rank.`,
+    tag: `₹${MIN_RANKING_BID.toLocaleString("en-IN")}+`,
   },
   {
     color: "lime" as const,
     n: "03",
     icon: "🏆",
     title: "Climb the ranking",
-    body: "Highest verified paid amount holds the rank until someone beats it.",
+    body: "Highest verified combined score (bid + hype) holds the rank until someone beats it.",
     tag: "Verified",
   },
 ];
